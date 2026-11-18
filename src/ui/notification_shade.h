@@ -12,6 +12,8 @@ bool notificationShadeIsOpen();
 void notificationPush(const char* title,
                       const char* body,
                       const char* timeStr = nullptr,
-                      uint32_t accentHex = StudioTheme::CHAMPAGNE);
-void notificationClearAll();
+                      uint32_t accentHex = StudioTheme::CHAMPAGNE,
+                      const char* syncKey = nullptr);
+bool notificationRemoveByKey(const char* syncKey);
+void notificationClearAll(bool syncToPhone = true);
 int  notificationCount();

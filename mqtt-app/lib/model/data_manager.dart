@@ -4,10 +4,10 @@ import 'dart:io';
 
 import 'package:device_apps/device_apps.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
-import 'package:notifier_listener/notifier_listener.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
@@ -34,8 +34,10 @@ class DataManager with ChangeNotifier {
   String  _defaultTopic  = kDefaultTopic;
 
   final http.Client _client = http.Client();
-  AndroidNotificationListener? _notifications;
-  StreamSubscription<NotifierListenerEvent>? _subscription;
+  static const EventChannel _notifEventChannel = EventChannel('mydeskmate/notif_events');
+  static const MethodChannel _notifMethodChannel = MethodChannel('mydeskmate/notif_methods');
+  StreamSubscription<dynamic>? _subscription;
+  StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _mqttSub;
   final List<DataModel.ProcessedNotification> _processedNotifications = List.empty(growable: true);
   MqttServerClient? _mqttServerClient;
   List<ApplicationWithIcon> _apps = List.empty();
@@ -242,6 +244,10 @@ class DataManager with ChangeNotifier {
     if (client.connectionStatus!.state == MqttConnectionState.connected) {
       print('[MQTT] Mosquitto client connected');
       logConsoleOutput(null, '[MQTT TLS] Connected to $mqttServerURL:8883');
+      final syncTopic = '$_defaultTopic/sync';
+      client.subscribe(syncTopic, MqttQos.atLeastOnce);
+      _mqttSub?.cancel();
+      _mqttSub = client.updates?.listen(_onMqttSyncMessage);
     } else {
       print(
           '[MQTT] ERROR Mosquitto client connection failed - disconnecting, state is ${client.connectionStatus!.state}');
@@ -254,8 +260,35 @@ class DataManager with ChangeNotifier {
   }
 
   void _onMQTTDisconnected() {
+    _mqttSub?.cancel();
+    _mqttSub = null;
     _mqttServerClient = null;
     print('[MQTT] Mosquitto client disconnected');
+  }
+
+  void _onMqttSyncMessage(List<MqttReceivedMessage<MqttMessage>> events) {
+    for (final event in events) {
+      final recMess = event.payload as MqttPublishMessage;
+      final raw = MqttPublishPayload.bytesToStringAsString(recMess.payload.message).trim();
+      try {
+        final data = jsonDecode(raw);
+        if (data is Map<String, dynamic>) {
+          final action = data['action']?.toString() ?? '';
+          if (action == 'remove') {
+            final key = data['key']?.toString() ?? '';
+            if (key.isNotEmpty) {
+              _notifMethodChannel.invokeMethod('dismiss', {'key': key});
+              logConsoleOutput(null, '[SYNC] Dismissed on Android: $key');
+            }
+          } else if (action == 'clear_all') {
+            _notifMethodChannel.invokeMethod('dismissAll');
+            logConsoleOutput(null, '[SYNC] Cleared all notifications on Android');
+          }
+        }
+      } catch (e) {
+        print('[SYNC] Invalid sync JSON: $e');
+      }
+    }
   }
 
   Future<void> _publishMQTTMessage(DataModel.Notification notification, NotificationMQTTRule rule) async {
@@ -309,38 +342,17 @@ class DataManager with ChangeNotifier {
   // Remote notifications
 
   void _startRemoteNotificationListener() {
-    var listener = AndroidNotificationListener();
-    _notifications = listener;
-    try {
-      _subscription = listener.notificationStream?.listen(_onRemoteNotificationReceived);
-    } on NotifierListener catch (exception) {
-      print(exception);
-    }
+    _subscription = _notifEventChannel.receiveBroadcastStream().listen(
+      _onRemoteNotificationEvent,
+      onError: (err) => print('[SYNC] EventChannel error: $err'),
+    );
   }
 
   void _stopRemoteNotificationListening() {
     _subscription?.cancel();
   }
 
-  void _onRemoteNotificationReceived(NotifierListenerEvent event) {
-    // suppress android system notifications
-    if (event.packageName == "com.android.systemui") {
-      return;
-    }
-
-    final notification = DataModel.Notification((b) => b
-      ..packageName = event.packageName
-      ..message = event.packageMessage
-      ..text = event.packageText
-      ..timestamp = event.timeStamp);
-
-    logConsoleOutput(notification,
-        'Notification received for ${event.packageName}:\nText: ${event.packageText}\nMessage: ${event.packageMessage}');
-
-    processRemoteNotification(notification);
-  }
-
-  Future<void> _publishDirectMQTTMessage(DataModel.Notification notification) async {
+  Future<void> _publishSyncPayload(Map<String, dynamic> payload) async {
     if (_mqttServerClient == null) {
       await _startMQTTServerClient();
       if (_mqttServerClient == null) {
@@ -348,19 +360,55 @@ class DataManager with ChangeNotifier {
         return;
       }
     }
-
-    final payload = {
-      "app": notification.packageName,
-      "title": notification.text,
-      "message": notification.message,
-    };
-
     final builder = MqttClientPayloadBuilder();
     builder.addString(json.encode(payload));
-
-    print('[MQTT TLS] publish to $_defaultTopic: ${payload.toString()}');
-    logConsoleOutput(notification, 'MQTT TLS $_defaultTopic: ${notification.text}');
     _mqttServerClient?.publishMessage(_defaultTopic, MqttQos.atLeastOnce, builder.payload!);
+  }
+
+  void _onRemoteNotificationEvent(dynamic rawEvent) {
+    if (rawEvent is! Map) return;
+    final action = rawEvent['action']?.toString() ?? 'post';
+    final key    = rawEvent['key']?.toString() ?? '';
+
+    if (action == 'remove') {
+      if (key.isNotEmpty) {
+        _publishSyncPayload({"action": "remove", "key": key});
+        logConsoleOutput(null, '[SYNC] Removed on Android -> ESP32: $key');
+      }
+      return;
+    }
+
+    final pkg   = rawEvent['packageName']?.toString() ?? '';
+    final title = rawEvent['title']?.toString() ?? '';
+    final msg   = rawEvent['message']?.toString() ?? '';
+    if (pkg == "com.android.systemui") return;
+
+    final notification = DataModel.Notification((b) => b
+      ..packageName = pkg
+      ..message = msg
+      ..text = title
+      ..timestamp = DateTime.now().toIso8601String());
+
+    logConsoleOutput(notification,
+        'Notification received for $pkg:\nText: $title\nMessage: $msg');
+
+    if (rules.isEmpty) {
+      _publishSyncPayload({
+        "action": "post",
+        "key": key,
+        "app": pkg,
+        "title": title,
+        "message": msg,
+      });
+      logConsoleOutput(notification, 'MQTT TLS $_defaultTopic: $title');
+      final processedNotification = DataModel.ProcessedNotification((b) => b
+        ..notification = notification.toBuilder()
+        ..regexMatches = BuiltList<NotificationMQTTRule>([]).toBuilder());
+      _processedNotifications.insert(0, processedNotification);
+      return;
+    }
+
+    processRemoteNotification(notification);
   }
 
   void processRemoteNotification(DataModel.Notification notification) {
@@ -373,7 +421,13 @@ class DataManager with ChangeNotifier {
 
     // Jika tidak ada rules.json, langsung forward semua notifikasi ke defaultTopic
     if (rules.isEmpty) {
-      _publishDirectMQTTMessage(notification);
+      _publishSyncPayload({
+        "action": "post",
+        "key": "",
+        "app": notification.packageName,
+        "title": notification.text,
+        "message": notification.message,
+      });
       final processedNotification = DataModel.ProcessedNotification((b) => b
         ..notification = notification.toBuilder()
         ..regexMatches = BuiltList<NotificationMQTTRule>([]).toBuilder());

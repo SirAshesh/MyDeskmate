@@ -1,6 +1,7 @@
 #include "notification_shade.h"
 #include "boot_screen.h"
 #include "../hal/display_hx8357d.h"
+#include "../utils/mqtt_notify.h"
 #include "ui_config.h"
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +17,7 @@ struct NotificationItem {
   char     title[48];
   char     body[128];
   char     timeStr[16];
+  char     key[96];
   uint32_t accentHex;
 };
 
@@ -137,7 +139,24 @@ static void rebuildNotificationList() {
       lv_label_set_text(lblTime, item.timeStr);
       lv_obj_set_style_text_font(lblTime, &lv_font_montserrat_12, 0);
       lv_obj_set_style_text_color(lblTime, lv_color_hex(StudioTheme::SUBTLE), 0);
+      lv_obj_set_style_pad_right(lblTime, 6, 0);
     }
+
+    // Tombol hapus per kartu (sync ke HP)
+    lv_obj_t* btnDismiss = lv_btn_create(topRow);
+    lv_obj_remove_style_all(btnDismiss);
+    lv_obj_set_size(btnDismiss, 22, 22);
+    lv_obj_set_style_bg_color(btnDismiss, lv_color_hex(StudioTheme::SURFACE), 0);
+    lv_obj_set_style_bg_color(btnDismiss, lv_color_hex(StudioTheme::RULE), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(btnDismiss, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btnDismiss, 6, 0);
+    lv_obj_add_event_cb(btnDismiss, onDismissCardClick, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+
+    lv_obj_t* dismissLbl = lv_label_create(btnDismiss);
+    lv_label_set_text(dismissLbl, LV_SYMBOL_CLOSE);
+    lv_obj_set_style_text_font(dismissLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(dismissLbl, lv_color_hex(StudioTheme::MUTED), 0);
+    lv_obj_center(dismissLbl);
 
     if (item.body[0] != '\0') {
       lv_obj_t* lblBody = lv_label_create(card);
@@ -151,8 +170,23 @@ static void rebuildNotificationList() {
   }
 }
 
+static void rebuildNotificationList();
+
+static void onDismissCardClick(lv_event_t* e) {
+  int idx = (int)(intptr_t)lv_event_get_user_data(e);
+  if (idx < 0 || idx >= s_count) return;
+  if (s_items[idx].key[0] != '\0') {
+    mqttNotifySendDismiss(s_items[idx].key);
+  }
+  for (int i = idx + 1; i < s_count; i++) {
+    s_items[i - 1] = s_items[i];
+  }
+  s_count--;
+  rebuildNotificationList();
+}
+
 static void onClearAllClick(lv_event_t* /*e*/) {
-  notificationClearAll();
+  notificationClearAll(true);
 }
 
 static void onCloseClick(lv_event_t* /*e*/) {
@@ -412,7 +446,22 @@ bool notificationShadeIsOpen() {
 void notificationPush(const char* title,
                       const char* body,
                       const char* timeStr,
-                      uint32_t accentHex) {
+                      uint32_t accentHex,
+                      const char* syncKey) {
+  // Jika key sudah ada, update item tersebut agar tidak duplikat
+  if (syncKey && syncKey[0] != '\0') {
+    for (int i = 0; i < s_count; i++) {
+      if (strcmp(s_items[i].key, syncKey) == 0) {
+        snprintf(s_items[i].title, sizeof(s_items[i].title), "%s", title ? title : "Notifikasi");
+        snprintf(s_items[i].body, sizeof(s_items[i].body), "%s", body ? body : "");
+        snprintf(s_items[i].timeStr, sizeof(s_items[i].timeStr), "%s", timeStr ? timeStr : "");
+        s_items[i].accentHex = accentHex;
+        rebuildNotificationList();
+        return;
+      }
+    }
+  }
+
   if (s_count >= MAX_NOTIFICATIONS) {
     // Geser membuang item paling lama
     for (int i = 1; i < MAX_NOTIFICATIONS; i++) {
@@ -425,12 +474,31 @@ void notificationPush(const char* title,
   snprintf(item.title, sizeof(item.title), "%s", title ? title : "Notifikasi");
   snprintf(item.body, sizeof(item.body), "%s", body ? body : "");
   snprintf(item.timeStr, sizeof(item.timeStr), "%s", timeStr ? timeStr : "");
+  snprintf(item.key, sizeof(item.key), "%s", syncKey ? syncKey : "");
   item.accentHex = accentHex;
 
   rebuildNotificationList();
 }
 
-void notificationClearAll() {
+bool notificationRemoveByKey(const char* syncKey) {
+  if (!syncKey || syncKey[0] == '\0') return false;
+  for (int i = 0; i < s_count; i++) {
+    if (strcmp(s_items[i].key, syncKey) == 0) {
+      for (int j = i + 1; j < s_count; j++) {
+        s_items[j - 1] = s_items[j];
+      }
+      s_count--;
+      rebuildNotificationList();
+      return true;
+    }
+  }
+  return false;
+}
+
+void notificationClearAll(bool syncToPhone) {
+  if (syncToPhone && s_count > 0) {
+    mqttNotifySendClearAll();
+  }
   s_count = 0;
   rebuildNotificationList();
 }

@@ -25,13 +25,24 @@
 #define MQTT_NOTIFY_TOPIC "mydeskmate/sirashesh/notif"
 #endif
 
+#ifndef MQTT_SYNC_TOPIC
+#define MQTT_SYNC_TOPIC MQTT_NOTIFY_TOPIC "/sync"
+#endif
+
 namespace {
 struct MqttNotifMsg {
+  bool isRemove;
+  char key[96];
   char title[48];
   char body[128];
 };
 
-QueueHandle_t    s_queue = nullptr;
+struct MqttTxMsg {
+  char payload[160];
+};
+
+QueueHandle_t    s_rxQueue = nullptr;
+QueueHandle_t    s_txQueue = nullptr;
 bool             s_taskStarted = false;
 WiFiClientSecure s_tlsClient;
 PubSubClient     s_mqtt(s_tlsClient);
@@ -60,7 +71,7 @@ static String extractJsonStr(const String& json, const char* key) {
 }
 
 static void onMqttMessage(char* /*topic*/, byte* payload, unsigned int length) {
-  if (!s_queue || length == 0) return;
+  if (!s_rxQueue || length == 0) return;
 
   String raw;
   raw.reserve(length + 1);
@@ -71,18 +82,28 @@ static void onMqttMessage(char* /*topic*/, byte* payload, unsigned int length) {
 
   MqttNotifMsg msg = {};
   if (raw.startsWith("{")) {
-    String title = extractJsonStr(raw, "title");
-    String body  = extractJsonStr(raw, "message");
-    if (body.length() == 0) body = extractJsonStr(raw, "body");
-    if (title.length() == 0) title = "Notifikasi";
-    snprintf(msg.title, sizeof(msg.title), "%s", title.c_str());
-    snprintf(msg.body, sizeof(msg.body), "%s", body.c_str());
+    String action = extractJsonStr(raw, "action");
+    String key    = extractJsonStr(raw, "key");
+    snprintf(msg.key, sizeof(msg.key), "%s", key.c_str());
+
+    if (action == "remove") {
+      msg.isRemove = true;
+    } else {
+      msg.isRemove = false;
+      String title = extractJsonStr(raw, "title");
+      String body  = extractJsonStr(raw, "message");
+      if (body.length() == 0) body = extractJsonStr(raw, "body");
+      if (title.length() == 0) title = "Notifikasi";
+      snprintf(msg.title, sizeof(msg.title), "%s", title.c_str());
+      snprintf(msg.body, sizeof(msg.body), "%s", body.c_str());
+    }
   } else {
+    msg.isRemove = false;
     snprintf(msg.title, sizeof(msg.title), "MQTT");
     snprintf(msg.body, sizeof(msg.body), "%s", raw.c_str());
   }
 
-  xQueueSend(s_queue, &msg, 0);
+  xQueueSend(s_rxQueue, &msg, 0);
   s_rxCount++;
 }
 
@@ -90,7 +111,7 @@ static void mqttTask(void* /*param*/) {
   s_tlsClient.setInsecure(); // Enkripsi TLS tanpa pin sertifikat CA
   s_mqtt.setServer(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
   s_mqtt.setCallback(onMqttMessage);
-  s_mqtt.setBufferSize(512);
+  s_mqtt.setBufferSize(768);
 
   uint32_t lastReconnect = 0;
   for (;;) {
@@ -113,6 +134,14 @@ static void mqttTask(void* /*param*/) {
         }
       } else {
         s_mqtt.loop();
+
+        // Kirim perintah sync (dismiss / clear_all) ke Android jika ada di antrean
+        if (s_txQueue) {
+          MqttTxMsg tx;
+          while (xQueueReceive(s_txQueue, &tx, 0) == pdTRUE) {
+            s_mqtt.publish(MQTT_SYNC_TOPIC, tx.payload);
+          }
+        }
       }
     }
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -122,23 +151,42 @@ static void mqttTask(void* /*param*/) {
 void mqttNotifyLoop() {
   if (!s_taskStarted && WiFi.status() == WL_CONNECTED) {
     s_taskStarted = true;
-    s_queue = xQueueCreate(8, sizeof(MqttNotifMsg));
+    s_rxQueue = xQueueCreate(8, sizeof(MqttNotifMsg));
+    s_txQueue = xQueueCreate(8, sizeof(MqttTxMsg));
     xTaskCreatePinnedToCore(mqttTask, "mqtt_tls", 8192, nullptr, 1, nullptr, 0);
   }
 
-  if (s_queue) {
+  if (s_rxQueue) {
     MqttNotifMsg msg;
-    while (xQueueReceive(s_queue, &msg, 0) == pdTRUE) {
-      char timeBuf[16] = {0};
-      time_t now = time(nullptr);
-      if (now >= 1700000000L) {
-        struct tm tmNow = {};
-        localtime_r(&now, &tmNow);
-        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", tmNow.tm_hour, tmNow.tm_min);
+    while (xQueueReceive(s_rxQueue, &msg, 0) == pdTRUE) {
+      if (msg.isRemove) {
+        notificationRemoveByKey(msg.key);
+      } else {
+        char timeBuf[16] = {0};
+        time_t now = time(nullptr);
+        if (now >= 1700000000L) {
+          struct tm tmNow = {};
+          localtime_r(&now, &tmNow);
+          snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", tmNow.tm_hour, tmNow.tm_min);
+        }
+        notificationPush(msg.title, msg.body, timeBuf, StudioTheme::CHAMPAGNE, msg.key);
       }
-      notificationPush(msg.title, msg.body, timeBuf, StudioTheme::CHAMPAGNE);
     }
   }
+}
+
+void mqttNotifySendDismiss(const char* key) {
+  if (!s_txQueue || !key || key[0] == '\0') return;
+  MqttTxMsg tx = {};
+  snprintf(tx.payload, sizeof(tx.payload), "{\"action\":\"remove\",\"key\":\"%s\"}", key);
+  xQueueSend(s_txQueue, &tx, 0);
+}
+
+void mqttNotifySendClearAll() {
+  if (!s_txQueue) return;
+  MqttTxMsg tx = {};
+  snprintf(tx.payload, sizeof(tx.payload), "{\"action\":\"clear_all\"}");
+  xQueueSend(s_txQueue, &tx, 0);
 }
 
 void mqttNotifyGetStatus(char* buf, size_t len) {
