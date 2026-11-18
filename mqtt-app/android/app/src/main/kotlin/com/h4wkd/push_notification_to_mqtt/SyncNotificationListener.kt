@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -23,6 +24,7 @@ import javax.net.ssl.SSLSocketFactory
 
 class SyncNotificationListener : NotificationListenerService() {
     companion object {
+        private const val TAG = "MyDeskmateSync"
         private const val CHANNEL_ID = "mydeskmate_sync_bg"
         private const val FG_NOTIF_ID = 9001
         private const val DEFAULT_BROKER = "broker.emqx.io"
@@ -75,6 +77,7 @@ class SyncNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        Log.i(TAG, "onListenerConnected")
         instance = this
         startForegroundCompat()
         startMqttLoop()
@@ -189,6 +192,7 @@ class SyncNotificationListener : NotificationListenerService() {
     }
 
     private fun emitUiLog(msg: String) {
+        Log.i(TAG, msg)
         mainHandler.post {
             eventSink?.success(hashMapOf("action" to "log", "message" to msg))
         }
@@ -382,6 +386,9 @@ class SyncNotificationListener : NotificationListenerService() {
                         os.write(buildPublishPacket(baseTopic, jsonStr))
                         os.flush()
                     }
+                    Log.i(TAG, "Published to $baseTopic: $jsonStr")
+                } else {
+                    Log.w(TAG, "Skip publish (mqttConnected=$mqttConnected): $jsonStr")
                 }
             } catch (e: Exception) {
                 emitUiLog("[MQTT BG] Publish error: ${e.message}")
