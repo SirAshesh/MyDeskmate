@@ -35,6 +35,8 @@ QueueHandle_t    s_queue = nullptr;
 bool             s_taskStarted = false;
 WiFiClientSecure s_tlsClient;
 PubSubClient     s_mqtt(s_tlsClient);
+int              s_lastRc = -99;
+uint32_t         s_rxCount = 0;
 } // namespace
 
 static String extractJsonStr(const String& json, const char* key) {
@@ -81,6 +83,7 @@ static void onMqttMessage(char* /*topic*/, byte* payload, unsigned int length) {
   }
 
   xQueueSend(s_queue, &msg, 0);
+  s_rxCount++;
 }
 
 static void mqttTask(void* /*param*/) {
@@ -100,10 +103,12 @@ static void mqttTask(void* /*param*/) {
           snprintf(clientId, sizeof(clientId), "mydeskmate_esp32_%08lx", (unsigned long)ESP.getEfuseMac());
           Serial.printf("[MQTT TLS] Connecting to %s:%d...\n", MQTT_BROKER_HOST, MQTT_BROKER_PORT);
           if (s_mqtt.connect(clientId)) {
+            s_lastRc = 0;
             s_mqtt.subscribe(MQTT_NOTIFY_TOPIC, 1);
             Serial.printf("[MQTT TLS] Connected & subscribed: %s\n", MQTT_NOTIFY_TOPIC);
           } else {
-            Serial.printf("[MQTT TLS] Connect failed rc=%d\n", s_mqtt.state());
+            s_lastRc = s_mqtt.state();
+            Serial.printf("[MQTT TLS] Connect failed rc=%d\n", s_lastRc);
           }
         }
       } else {
@@ -134,4 +139,21 @@ void mqttNotifyLoop() {
       notificationPush(msg.title, msg.body, timeBuf, StudioTheme::CHAMPAGNE);
     }
   }
+}
+
+void mqttNotifyGetStatus(char* buf, size_t len) {
+  if (!buf || len == 0) return;
+  snprintf(
+    buf, len,
+    "connected=%d state=%d lastRc=%d rx=%lu topic=%s broker=%s:%d freeHeap=%lu maxAlloc=%lu",
+    s_mqtt.connected() ? 1 : 0,
+    s_mqtt.state(),
+    s_lastRc,
+    (unsigned long)s_rxCount,
+    MQTT_NOTIFY_TOPIC,
+    MQTT_BROKER_HOST,
+    MQTT_BROKER_PORT,
+    (unsigned long)ESP.getFreeHeap(),
+    (unsigned long)ESP.getMaxAllocHeap()
+  );
 }

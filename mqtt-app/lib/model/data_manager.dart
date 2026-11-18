@@ -111,8 +111,16 @@ class DataManager with ChangeNotifier {
   }
 
   set mqttServerURL(String? mqttServerURL) {
-    _mqttServerURL = mqttServerURL;
-    _setPreference(SharedPreferenceKey.mqttServerURL.toString(), mqttServerURL);
+    String clean = (mqttServerURL ?? '').trim();
+    clean = clean.replaceFirst(RegExp(r'^(mqtts?|ssl|tcp)://'), '');
+    if (clean.contains(':')) {
+      clean = clean.split(':').first;
+    }
+    _mqttServerURL = clean.isEmpty ? kDefaultBroker : clean;
+    _setPreference(SharedPreferenceKey.mqttServerURL.toString(), _mqttServerURL);
+    _mqttServerClient?.disconnect();
+    _mqttServerClient = null;
+    _startMQTTServerClient();
   }
 
   String? get mqttUsername {
@@ -214,27 +222,30 @@ class DataManager with ChangeNotifier {
     final clientId = 'mydeskmate_android_${DateTime.now().millisecondsSinceEpoch}';
     final connMess = MqttConnectMessage()
         .withClientIdentifier(clientId)
-        .startClean()
-        .withWillQos(MqttQos.atLeastOnce);
+        .startClean();
     client.connectionMessage = connMess;
 
     try {
-      if (mqttUsername != null && mqttPassword != null) {
+      if (mqttUsername != null && mqttUsername!.isNotEmpty && mqttPassword != null && mqttPassword!.isNotEmpty) {
         await client.connect(mqttUsername, mqttPassword);
       } else {
         await client.connect();
       }
     } on Exception catch (e) {
       print('[MQTT] client exception - $e');
+      logConsoleOutput(null, '[MQTT TLS] Error: $e');
       client.disconnect();
+      return;
     }
 
     /// Check we are connected
     if (client.connectionStatus!.state == MqttConnectionState.connected) {
       print('[MQTT] Mosquitto client connected');
+      logConsoleOutput(null, '[MQTT TLS] Connected to $mqttServerURL:8883');
     } else {
       print(
           '[MQTT] ERROR Mosquitto client connection failed - disconnecting, state is ${client.connectionStatus!.state}');
+      logConsoleOutput(null, '[MQTT TLS] Connect failed: ${client.connectionStatus!.state}');
       client.disconnect();
       return;
     }

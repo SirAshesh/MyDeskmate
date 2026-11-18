@@ -1,4 +1,5 @@
 #include "notify_server.h"
+#include "mqtt_notify.h"
 #include "../ui/notification_shade.h"
 #include "../ui/studio_theme.h"
 #include <Arduino.h>
@@ -101,6 +102,12 @@ static void handleClear() {
   s_server.send(200, "application/json", "{\"ok\":true}");
 }
 
+static void handleStatus() {
+  char buf[256];
+  mqttNotifyGetStatus(buf, sizeof(buf));
+  s_server.send(200, "text/plain", buf);
+}
+
 void notifyServerLoop() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -109,6 +116,7 @@ void notifyServerLoop() {
     s_server.on("/", HTTP_GET, handleRoot);
     s_server.on("/notify", HTTP_ANY, handleNotify);
     s_server.on("/clear", HTTP_ANY, handleClear);
+    s_server.on("/status", HTTP_GET, handleStatus);
     s_server.begin();
 
     if (MDNS.begin("mydeskmate")) {
