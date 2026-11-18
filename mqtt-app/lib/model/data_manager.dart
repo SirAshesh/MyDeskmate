@@ -387,7 +387,7 @@ class DataManager with ChangeNotifier {
       ..packageName = pkg
       ..message = msg
       ..text = title
-      ..timestamp = DateTime.now().toIso8601String());
+      ..timestamp = DateTime.now());
 
     logConsoleOutput(notification,
         'Notification received for $pkg:\nText: $title\nMessage: $msg');
