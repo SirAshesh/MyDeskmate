@@ -36,6 +36,10 @@ class MainActivity: FlutterActivity() {
                     SyncNotificationListener.dismissAll()
                     result.success(true)
                 }
+                "reloadConfig" -> {
+                    SyncNotificationListener.reloadConfig()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }

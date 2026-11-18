@@ -45,7 +45,6 @@ class DataManager with ChangeNotifier {
   DataManager() {
     _loadSettings();
     _loadApps();
-    _startMQTTServerClient();
     _startRemoteNotificationListener();
 
     Timer.periodic(const Duration(hours: 1), (timer) {
@@ -120,9 +119,7 @@ class DataManager with ChangeNotifier {
     }
     _mqttServerURL = clean.isEmpty ? kDefaultBroker : clean;
     _setPreference(SharedPreferenceKey.mqttServerURL.toString(), _mqttServerURL);
-    _mqttServerClient?.disconnect();
-    _mqttServerClient = null;
-    _startMQTTServerClient();
+    _notifMethodChannel.invokeMethod('reloadConfig');
   }
 
   String? get mqttUsername {
@@ -148,6 +145,7 @@ class DataManager with ChangeNotifier {
   set defaultTopic(String topic) {
     _defaultTopic = topic.trim().isEmpty ? kDefaultTopic : topic.trim();
     _setPreference(SharedPreferenceKey.defaultTopic.toString(), _defaultTopic);
+    _notifMethodChannel.invokeMethod('reloadConfig');
   }
 
   Future<void> _setPreference(String key, String? value) async {
@@ -370,9 +368,14 @@ class DataManager with ChangeNotifier {
     final action = rawEvent['action']?.toString() ?? 'post';
     final key    = rawEvent['key']?.toString() ?? '';
 
+    if (action == 'log') {
+      final msg = rawEvent['message']?.toString() ?? '';
+      if (msg.isNotEmpty) logConsoleOutput(null, msg);
+      return;
+    }
+
     if (action == 'remove') {
       if (key.isNotEmpty) {
-        _publishSyncPayload({"action": "remove", "key": key});
         logConsoleOutput(null, '[SYNC] Removed on Android -> ESP32: $key');
       }
       return;
@@ -393,14 +396,7 @@ class DataManager with ChangeNotifier {
         'Notification received for $pkg:\nText: $title\nMessage: $msg');
 
     if (rules.isEmpty) {
-      _publishSyncPayload({
-        "action": "post",
-        "key": key,
-        "app": pkg,
-        "title": title,
-        "message": msg,
-      });
-      logConsoleOutput(notification, 'MQTT TLS $_defaultTopic: $title');
+      // Sudah dikirim langsung oleh background service SyncNotificationListener
       final processedNotification = DataModel.ProcessedNotification((b) => b
         ..notification = notification.toBuilder()
         ..regexMatches = BuiltList<NotificationMQTTRule>([]).toBuilder());
