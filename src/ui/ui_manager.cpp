@@ -1,4 +1,6 @@
 #include "ui_manager.h"
+#include "boot_screen.h"
+#include "notification_shade.h"
 #include "page_home.h"
 #include "page_antigravity.h"
 #include "page_settings.h"
@@ -22,6 +24,11 @@ static lv_obj_t* s_panelLeft  = nullptr;
 static lv_obj_t* s_panelRight = nullptr;
 static MenuPageEntry s_pages[MAX_PAGES] = {};
 static int s_pageCount = 0;
+static int s_activePage = -1;
+
+static void pageAnimYCb(void* var, int32_t v) {
+  lv_obj_set_y((lv_obj_t*)var, v);
+}
 
 static void onMenuBtnClick(lv_event_t* e) {
   int idx = (int)(intptr_t)lv_event_get_user_data(e);
@@ -83,11 +90,29 @@ int uiRegisterMenuPageImg(const lv_img_dsc_t* imgSrc, lv_obj_t* page) {
 }
 
 void uiSetActivePage(int pageIdx) {
+  bool animateSlide = (s_activePage >= 0 && s_activePage != pageIdx);
+  s_activePage = pageIdx;
+
   for (int i = 0; i < s_pageCount; i++) {
     bool active = (i == pageIdx);
     if (s_pages[i].page) {
-      if (active) lv_obj_clear_flag(s_pages[i].page, LV_OBJ_FLAG_HIDDEN);
-      else        lv_obj_add_flag(s_pages[i].page, LV_OBJ_FLAG_HIDDEN);
+      if (active) {
+        lv_obj_clear_flag(s_pages[i].page, LV_OBJ_FLAG_HIDDEN);
+        if (animateSlide) {
+          lv_anim_t a;
+          lv_anim_init(&a);
+          lv_anim_set_var(&a, s_pages[i].page);
+          lv_anim_set_exec_cb(&a, pageAnimYCb);
+          lv_anim_set_values(&a, 16, 0);
+          lv_anim_set_time(&a, 180);
+          lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+          lv_anim_start(&a);
+        } else {
+          lv_obj_set_y(s_pages[i].page, 0);
+        }
+      } else {
+        lv_obj_add_flag(s_pages[i].page, LV_OBJ_FLAG_HIDDEN);
+      }
     }
     if (s_pages[i].btn) {
       lv_obj_set_style_border_color(
@@ -149,5 +174,7 @@ void buildUi() {
 
   uiSettingsNotifyAll();
   uiSetActivePage(0);
+  notificationShadeInit();
+  bootScreenStart();
   initTouchDebugOverlay();
 }

@@ -7,6 +7,8 @@
 #include "hal/touch_4wire.h"
 #include "ui/page_antigravity.h"
 #include "ui/ui_manager.h"
+#include "utils/mqtt_notify.h"
+#include "utils/notify_server.h"
 
 static lv_disp_draw_buf_t lvDrawBuf;
 static lv_color_t*        lvBuf1 = nullptr;
@@ -107,6 +109,8 @@ void setup() {
 
 void loop() {
   handleSerialCommands();
+  notifyServerLoop();
+  mqttNotifyLoop();
   lv_timer_handler();
   delay(5);
 }
