@@ -1,0 +1,40 @@
+============================================================
+MAPPING PIN FINAL: ESP32-S3 -> TFT 3.5" 8-BIT PARALLEL (HX8357D)
+============================================================
+
+[1. DAYA - Header J4 (Kiri Atas TFT, 6 Lubang)]
+Lubang 1 (Kosong)  -> Tidak dipakai
+Lubang 2 (RESET)   -> Tidak dipakai (gunakan LCD_RST)
+Lubang 3 (3.3V)    -> 3V3 (ESP32-S3)
+Lubang 4 (5V)      -> 3V3 (ESP32-S3) [atau 5V/VIN jika jumper IN-OUT disolder]
+Lubang 5 (GND)     -> GND (ESP32-S3)
+Lubang 6 (GND)     -> Opsional (satu jalur dengan lubang 5)
+
+[2. KONTROL LAYAR - Header J3 (Kanan Atas TFT, 6 Lubang)]
+Lubang 1 (LCD_RD)  -> GPIO 15
+Lubang 2 (LCD_WR)  -> GPIO 7
+Lubang 3 (LCD_RS)  -> GPIO 6
+Lubang 4 (LCD_CS)  -> GPIO 5
+Lubang 5 (LCD_RST) -> GPIO 4
+Lubang 6 (F_CS)    -> Tidak dipakai
+
+[3. DATA 8-BIT - Header J1 & J2 (Bawah TFT)]
+LCD_D0 (J1 Lubang 8 / paling kanan J1) -> GPIO 16
+LCD_D1 (J1 Lubang 7)                   -> GPIO 17
+LCD_D2 (J2 Lubang 6)                   -> GPIO 18
+LCD_D3 (J2 Lubang 5)                   -> GPIO 8
+LCD_D4 (J2 Lubang 4)                   -> GPIO 9  (lompati pin 3 dan 46 di ESP32-S3)
+LCD_D5 (J2 Lubang 3)                   -> GPIO 10
+LCD_D6 (J2 Lubang 2)                   -> GPIO 11
+LCD_D7 (J2 Lubang 1 / paling kiri J2)  -> GPIO 13 (dipindah dari GPIO 12; 4 lubang kanan J2 dikosongkan)
+
+[4. RINGKASAN KONFIGURASI KODE]
+Driver   : HX8357D (320x480)
+Port     : COM9 (115200 baud)
+PIN_RD   : 15
+PIN_WR   : 7
+PIN_RS   : 6
+PIN_CS   : 5
+PIN_RST  : 4
+DATA_PINS: {16, 17, 18, 8, 9, 10, 11, 13}  // D0..D7
+
