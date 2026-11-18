@@ -17,6 +17,7 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLSocket
@@ -56,6 +57,7 @@ class SyncNotificationListener : NotificationListenerService() {
 
     private val running = AtomicBoolean(false)
     private val txExecutor = Executors.newSingleThreadExecutor()
+    private val pendingTxQueue = ConcurrentLinkedQueue<String>()
     private var workerThread: Thread? = null
 
     @Volatile
@@ -282,7 +284,7 @@ class SyncNotificationListener : NotificationListenerService() {
 
     private fun connectAndReadLoop() {
         val sslSocket = SSLSocketFactory.getDefault().createSocket(brokerHost, 8883) as SSLSocket
-        sslSocket.soTimeout = 25000
+        sslSocket.soTimeout = 60000
         sslSocket.startHandshake()
         socket = sslSocket
 
@@ -313,6 +315,9 @@ class SyncNotificationListener : NotificationListenerService() {
 
         mqttConnected = true
         emitUiLog("[MQTT BG TLS] Connected to $brokerHost:8883")
+
+        // Flush antrean pesan yang tertunda saat sempat putus
+        flushPendingQueue()
 
         // Keepalive thread
         val kaThread = Thread {
@@ -376,23 +381,37 @@ class SyncNotificationListener : NotificationListenerService() {
         }
     }
 
-    private fun publishJsonAsync(obj: JSONObject) {
-        val jsonStr = obj.toString()
+    private fun flushPendingQueue() {
         txExecutor.execute {
-            try {
-                val os = outStream
-                if (mqttConnected && os != null) {
+            while (mqttConnected) {
+                val jsonStr = pendingTxQueue.peek() ?: break
+                val os = outStream ?: break
+                try {
                     synchronized(os) {
                         os.write(buildPublishPacket(baseTopic, jsonStr))
                         os.flush()
                     }
+                    pendingTxQueue.poll()
                     Log.i(TAG, "Published to $baseTopic: $jsonStr")
-                } else {
-                    Log.w(TAG, "Skip publish (mqttConnected=$mqttConnected): $jsonStr")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Flush publish error: ${e.message}")
+                    closeSocketQuietly()
+                    break
                 }
-            } catch (e: Exception) {
-                emitUiLog("[MQTT BG] Publish error: ${e.message}")
             }
+        }
+    }
+
+    private fun publishJsonAsync(obj: JSONObject) {
+        val jsonStr = obj.toString()
+        if (pendingTxQueue.size >= 30) {
+            pendingTxQueue.poll()
+        }
+        pendingTxQueue.add(jsonStr)
+        if (mqttConnected) {
+            flushPendingQueue()
+        } else {
+            Log.i(TAG, "Queued while reconnecting: $jsonStr")
         }
     }
 
