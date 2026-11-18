@@ -3,10 +3,12 @@
 #include <lvgl.h>
 
 struct UiSettings {
-  int  scalePct;    // 60..110 (%) untuk skala konten sisi kanan
-  int  rowGapPx;    // 2..24 (px) jarak antar baris konten
-  bool showSeconds; // tampilkan :SS pada jam
-  bool showDate;    // tampilkan hari & tanggal
+  int  scalePct;        // 60..110 (%) untuk skala konten sisi kanan
+  int  rowGapPx;        // 2..24 (px) jarak antar baris konten
+  bool showSeconds;     // tampilkan :SS pada jam
+  bool showDate;        // tampilkan hari & tanggal
+  bool showTouchDot;    // tampilkan titik sentuhan di layar
+  bool hideTouchCoords; // sembunyikan label lokasi sentuhan (X/Y)
 };
 
 using UiSettingsListener = void (*)(const UiSettings& cfg);

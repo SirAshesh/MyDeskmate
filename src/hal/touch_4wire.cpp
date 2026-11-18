@@ -1,6 +1,7 @@
 #include "touch_4wire.h"
 #include "display_hx8357d.h"
 #include "../ui/studio_theme.h"
+#include "../utils/ui_settings.h"
 #include "calibration_config.h"
 #include "ui_config.h"
 #include <Arduino.h>
@@ -193,6 +194,19 @@ static bool readTouchScreen(int& sx, int& sy, int* outRx = nullptr, int* outRy =
 static lv_obj_t* s_touchDbgDot   = nullptr;
 static lv_obj_t* s_touchDbgLabel = nullptr;
 
+static void applyTouchDebugSettings(const UiSettings& cfg) {
+  if (s_touchDbgDot && !cfg.showTouchDot) {
+    lv_obj_add_flag(s_touchDbgDot, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (s_touchDbgLabel) {
+    if (cfg.hideTouchCoords) {
+      lv_obj_add_flag(s_touchDbgLabel, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_clear_flag(s_touchDbgLabel, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+}
+
 void initTouchDebugOverlay() {
   lv_obj_t* top = lv_layer_top();
 
@@ -220,6 +234,9 @@ void initTouchDebugOverlay() {
   lv_obj_set_style_pad_ver(s_touchDbgLabel, 3, 0);
   lv_obj_align(s_touchDbgLabel, LV_ALIGN_BOTTOM_RIGHT, -6, -6);
   lv_obj_clear_flag(s_touchDbgLabel, LV_OBJ_FLAG_CLICKABLE);
+
+  uiSettingsSubscribe(applyTouchDebugSettings);
+  applyTouchDebugSettings(uiSettingsGet());
 }
 #else
 void initTouchDebugOverlay() {}
@@ -240,11 +257,16 @@ void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
     data->point.y = lastY;
 
 #if UI_DEBUG_TOUCH_POS
+    const UiSettings& cfg = uiSettingsGet();
     if (s_touchDbgDot) {
-      lv_obj_set_pos(s_touchDbgDot, sx - 6, sy - 6);
-      lv_obj_clear_flag(s_touchDbgDot, LV_OBJ_FLAG_HIDDEN);
+      if (cfg.showTouchDot) {
+        lv_obj_set_pos(s_touchDbgDot, sx - 6, sy - 6);
+        lv_obj_clear_flag(s_touchDbgDot, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(s_touchDbgDot, LV_OBJ_FLAG_HIDDEN);
+      }
     }
-    if (s_touchDbgLabel) {
+    if (s_touchDbgLabel && !cfg.hideTouchCoords) {
       lv_label_set_text_fmt(s_touchDbgLabel, "X:%d Y:%d (%d,%d)", sx, sy, rx, ry);
     }
 #endif

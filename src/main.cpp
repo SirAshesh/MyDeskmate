@@ -12,7 +12,7 @@
 
 static lv_disp_draw_buf_t lvDrawBuf;
 static lv_color_t*        lvBuf1 = nullptr;
-static constexpr int      LV_BUF_LINES = 32;
+static constexpr int      LV_BUF_LINES = 64;
 static lv_disp_drv_t      lvDispDrv;
 static lv_indev_drv_t     lvIndevDrv;
 
@@ -81,11 +81,16 @@ void setup() {
   displayInit();
 
   lv_init();
-  lvBuf1 = (lv_color_t*)heap_caps_malloc(UI_W * LV_BUF_LINES * sizeof(lv_color_t), MALLOC_CAP_DMA);
+  int bufLines = LV_BUF_LINES;
+  lvBuf1 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
   if (!lvBuf1) {
-    lvBuf1 = (lv_color_t*)malloc(UI_W * LV_BUF_LINES * sizeof(lv_color_t));
+    bufLines = 32;
+    lvBuf1 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
   }
-  lv_disp_draw_buf_init(&lvDrawBuf, lvBuf1, nullptr, UI_W * LV_BUF_LINES);
+  if (!lvBuf1) {
+    lvBuf1 = (lv_color_t*)malloc(UI_W * bufLines * sizeof(lv_color_t));
+  }
+  lv_disp_draw_buf_init(&lvDrawBuf, lvBuf1, nullptr, UI_W * bufLines);
 
   lv_disp_drv_init(&lvDispDrv);
   lvDispDrv.hor_res  = UI_W;
@@ -103,6 +108,9 @@ void setup() {
 
   Serial.println("==========================================");
   Serial.println("  S3-OS Studio UI (LVGL + LovyanGFX)");
+  Serial.printf("  PSRAM: %u KB (free %u KB)\n",
+                (unsigned)(ESP.getPsramSize() / 1024),
+                (unsigned)(ESP.getFreePsram() / 1024));
   Serial.println("  Serial cmd: [c] Cal | [t] Touch | [r] Reset Cal | [i] Invert");
   Serial.println("==========================================");
 }
@@ -111,6 +119,8 @@ void loop() {
   handleSerialCommands();
   notifyServerLoop();
   mqttNotifyLoop();
-  lv_timer_handler();
-  delay(5);
+  uint32_t waitMs = lv_timer_handler();
+  if (waitMs > 5) waitMs = 5;
+  if (waitMs < 1) waitMs = 1;
+  delay(waitMs);
 }

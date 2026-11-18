@@ -9,6 +9,8 @@ static lv_obj_t* s_sldGap          = nullptr;
 static lv_obj_t* s_lblGapVal       = nullptr;
 static lv_obj_t* s_swSeconds       = nullptr;
 static lv_obj_t* s_swDate          = nullptr;
+static lv_obj_t* s_swShowTouch     = nullptr;
+static lv_obj_t* s_swHideTouchLoc  = nullptr;
 static lv_obj_t* s_lblSettingsInfo = nullptr;
 
 static void syncSettingsControls(const UiSettings& cfg) {
@@ -25,6 +27,14 @@ static void syncSettingsControls(const UiSettings& cfg) {
   if (s_swDate) {
     if (cfg.showDate) lv_obj_add_state(s_swDate, LV_STATE_CHECKED);
     else              lv_obj_clear_state(s_swDate, LV_STATE_CHECKED);
+  }
+  if (s_swShowTouch) {
+    if (cfg.showTouchDot) lv_obj_add_state(s_swShowTouch, LV_STATE_CHECKED);
+    else                  lv_obj_clear_state(s_swShowTouch, LV_STATE_CHECKED);
+  }
+  if (s_swHideTouchLoc) {
+    if (cfg.hideTouchCoords) lv_obj_add_state(s_swHideTouchLoc, LV_STATE_CHECKED);
+    else                     lv_obj_clear_state(s_swHideTouchLoc, LV_STATE_CHECKED);
   }
 }
 
@@ -70,6 +80,22 @@ static void onDateSwitchChanged(lv_event_t* e) {
   lv_obj_t* sw = lv_event_get_target(e);
   UiSettings next = uiSettingsGet();
   next.showDate = lv_obj_has_state(sw, LV_STATE_CHECKED);
+  uiSettingsUpdate(next, true);
+  if (s_lblSettingsInfo) lv_label_set_text(s_lblSettingsInfo, "Tersimpan");
+}
+
+static void onShowTouchSwitchChanged(lv_event_t* e) {
+  lv_obj_t* sw = lv_event_get_target(e);
+  UiSettings next = uiSettingsGet();
+  next.showTouchDot = lv_obj_has_state(sw, LV_STATE_CHECKED);
+  uiSettingsUpdate(next, true);
+  if (s_lblSettingsInfo) lv_label_set_text(s_lblSettingsInfo, "Tersimpan");
+}
+
+static void onHideTouchLocSwitchChanged(lv_event_t* e) {
+  lv_obj_t* sw = lv_event_get_target(e);
+  UiSettings next = uiSettingsGet();
+  next.hideTouchCoords = lv_obj_has_state(sw, LV_STATE_CHECKED);
   uiSettingsUpdate(next, true);
   if (s_lblSettingsInfo) lv_label_set_text(s_lblSettingsInfo, "Tersimpan");
 }
@@ -139,6 +165,9 @@ static void styleSettingsSwitch(lv_obj_t* sw, uint32_t accentHex) {
 
 lv_obj_t* buildSettingsPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_t* pageSettings = makePlainBox(parent, 0, 0, rightW, rightH);
+  lv_obj_add_flag(pageSettings, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(pageSettings, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(pageSettings, LV_SCROLLBAR_MODE_AUTO);
   lv_obj_set_style_pad_hor(pageSettings, 16, 0);
   lv_obj_set_style_pad_ver(pageSettings, 12, 0);
   lv_obj_set_style_pad_row(pageSettings, 10, 0);
@@ -240,6 +269,38 @@ lv_obj_t* buildSettingsPage(lv_obj_t* parent, int rightW, int rightH) {
   s_swDate = lv_switch_create(grpDate);
   styleSettingsSwitch(s_swDate, StudioTheme::TEAL);
   lv_obj_add_event_cb(s_swDate, onDateSwitchChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+
+  // Card 4: Switch Debug Sentuhan
+  lv_obj_t* cardTouchDbg = makeSettingsCard(pageSettings, cardW);
+  lv_obj_set_style_pad_row(cardTouchDbg, 8, 0);
+
+  lv_obj_t* rowShowTouch = makePlainBox(cardTouchDbg, 0, 0, lv_pct(100), LV_SIZE_CONTENT);
+  lv_obj_set_layout(rowShowTouch, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(rowShowTouch, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(rowShowTouch, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  lv_obj_t* lblShowTouch = lv_label_create(rowShowTouch);
+  lv_label_set_text(lblShowTouch, "Tampilkan Sentuhan");
+  lv_obj_set_style_text_font(lblShowTouch, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(lblShowTouch, lv_color_hex(StudioTheme::TEXT), 0);
+
+  s_swShowTouch = lv_switch_create(rowShowTouch);
+  styleSettingsSwitch(s_swShowTouch, StudioTheme::CORAL);
+  lv_obj_add_event_cb(s_swShowTouch, onShowTouchSwitchChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+
+  lv_obj_t* rowHideLoc = makePlainBox(cardTouchDbg, 0, 0, lv_pct(100), LV_SIZE_CONTENT);
+  lv_obj_set_layout(rowHideLoc, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(rowHideLoc, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(rowHideLoc, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  lv_obj_t* lblHideLoc = lv_label_create(rowHideLoc);
+  lv_label_set_text(lblHideLoc, "Sembunyikan Lokasi Sentuhan");
+  lv_obj_set_style_text_font(lblHideLoc, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(lblHideLoc, lv_color_hex(StudioTheme::TEXT), 0);
+
+  s_swHideTouchLoc = lv_switch_create(rowHideLoc);
+  styleSettingsSwitch(s_swHideTouchLoc, StudioTheme::SAGE);
+  lv_obj_add_event_cb(s_swHideTouchLoc, onHideTouchLocSwitchChanged, LV_EVENT_VALUE_CHANGED, nullptr);
 
   // Footer
   lv_obj_t* ftr = makePlainBox(pageSettings, 0, 0, cardW, LV_SIZE_CONTENT);

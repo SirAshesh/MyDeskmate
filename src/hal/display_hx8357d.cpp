@@ -38,7 +38,7 @@ LGFX_HX8357D::LGFX_HX8357D() {
   {
     auto cfg = _bus.config();
     cfg.port       = 0;
-    cfg.freq_write = 16000000;
+    cfg.freq_write = 20000000;
     cfg.pin_rd     = PIN_RD;
     cfg.pin_wr     = PIN_WR;
     cfg.pin_rs     = PIN_RS;

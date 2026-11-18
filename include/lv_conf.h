@@ -9,11 +9,11 @@
 
 /* Memory allocation for LVGL objects & animations */
 #define LV_MEM_CUSTOM 0
-#define LV_MEM_SIZE (64U * 1024U)
+#define LV_MEM_SIZE (128U * 1024U)
 
 /* Display refresh & input read period (ms) */
 #define LV_DISP_DEF_REFR_PERIOD 16
-#define LV_INDEV_DEF_READ_PERIOD 30
+#define LV_INDEV_DEF_READ_PERIOD 16
 
 /* Use ESP-IDF esp_timer_get_time() for C-safe LVGL tick */
 #define LV_TICK_CUSTOM 1

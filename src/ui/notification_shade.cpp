@@ -2,6 +2,7 @@
 #include "boot_screen.h"
 #include "../hal/display_hx8357d.h"
 #include "../utils/mqtt_notify.h"
+#include "../utils/text_sanitize.h"
 #include "ui_config.h"
 #include <stdio.h>
 #include <string.h>
@@ -59,6 +60,8 @@ static void onCloseAnimReady(lv_anim_t* /*a*/) {
     lv_obj_clear_flag(s_topHintPill, LV_OBJ_FLAG_HIDDEN);
   }
 }
+
+static void onDismissCardClick(lv_event_t* e);
 
 static void rebuildNotificationList() {
   if (!s_list || !s_emptyBox) return;
@@ -283,7 +286,7 @@ void notificationShadeInit() {
   // Container utama notification shade (full screen di layer teratas)
   s_shade = makePlainBox(topLayer, 0, -UI_H, UI_W, UI_H);
   lv_obj_set_style_bg_color(s_shade, lv_color_hex(StudioTheme::BG), 0);
-  lv_obj_set_style_bg_opa(s_shade, LV_OPA_90, 0);
+  lv_obj_set_style_bg_opa(s_shade, LV_OPA_COVER, 0);
   lv_obj_add_flag(s_shade, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_HIDDEN);
 
   // Header shade
@@ -448,12 +451,18 @@ void notificationPush(const char* title,
                       const char* timeStr,
                       uint32_t accentHex,
                       const char* syncKey) {
+  char cleanTitle[48];
+  char cleanBody[128];
+  sanitizeUtf8ForLvgl(title ? title : "Notifikasi", cleanTitle, sizeof(cleanTitle));
+  sanitizeUtf8ForLvgl(body ? body : "", cleanBody, sizeof(cleanBody));
+  if (cleanTitle[0] == '\0') snprintf(cleanTitle, sizeof(cleanTitle), "Notifikasi");
+
   // Jika key sudah ada, update item tersebut agar tidak duplikat
   if (syncKey && syncKey[0] != '\0') {
     for (int i = 0; i < s_count; i++) {
       if (strcmp(s_items[i].key, syncKey) == 0) {
-        snprintf(s_items[i].title, sizeof(s_items[i].title), "%s", title ? title : "Notifikasi");
-        snprintf(s_items[i].body, sizeof(s_items[i].body), "%s", body ? body : "");
+        snprintf(s_items[i].title, sizeof(s_items[i].title), "%s", cleanTitle);
+        snprintf(s_items[i].body, sizeof(s_items[i].body), "%s", cleanBody);
         snprintf(s_items[i].timeStr, sizeof(s_items[i].timeStr), "%s", timeStr ? timeStr : "");
         s_items[i].accentHex = accentHex;
         rebuildNotificationList();
@@ -471,8 +480,8 @@ void notificationPush(const char* title,
   }
 
   NotificationItem& item = s_items[s_count++];
-  snprintf(item.title, sizeof(item.title), "%s", title ? title : "Notifikasi");
-  snprintf(item.body, sizeof(item.body), "%s", body ? body : "");
+  snprintf(item.title, sizeof(item.title), "%s", cleanTitle);
+  snprintf(item.body, sizeof(item.body), "%s", cleanBody);
   snprintf(item.timeStr, sizeof(item.timeStr), "%s", timeStr ? timeStr : "");
   snprintf(item.key, sizeof(item.key), "%s", syncKey ? syncKey : "");
   item.accentHex = accentHex;

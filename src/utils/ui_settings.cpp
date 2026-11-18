@@ -3,7 +3,7 @@
 #include <Preferences.h>
 
 static constexpr int MAX_LISTENERS = 12;
-static UiSettings s_cfg = { 100, 8, true, true };
+static UiSettings s_cfg = { 100, 8, true, true, true, false };
 static UiSettingsListener s_listeners[MAX_LISTENERS] = {};
 static int s_listenerCount = 0;
 
@@ -14,10 +14,12 @@ const UiSettings& uiSettingsGet() {
 void uiSettingsLoad() {
   Preferences prefs;
   if (prefs.begin("ui_cfg", true)) {
-    s_cfg.scalePct    = constrain(prefs.getInt("scale", 100), 60, 110);
-    s_cfg.rowGapPx    = constrain(prefs.getInt("gap", 8), 2, 24);
-    s_cfg.showSeconds = prefs.getBool("sec", true);
-    s_cfg.showDate    = prefs.getBool("date", true);
+    s_cfg.scalePct        = constrain(prefs.getInt("scale", 100), 60, 110);
+    s_cfg.rowGapPx        = constrain(prefs.getInt("gap", 8), 2, 24);
+    s_cfg.showSeconds     = prefs.getBool("sec", true);
+    s_cfg.showDate        = prefs.getBool("date", true);
+    s_cfg.showTouchDot    = prefs.getBool("touchDot", true);
+    s_cfg.hideTouchCoords = prefs.getBool("hideTouch", false);
     prefs.end();
   }
 }
@@ -29,21 +31,25 @@ void uiSettingsSave() {
     prefs.putInt("gap", s_cfg.rowGapPx);
     prefs.putBool("sec", s_cfg.showSeconds);
     prefs.putBool("date", s_cfg.showDate);
+    prefs.putBool("touchDot", s_cfg.showTouchDot);
+    prefs.putBool("hideTouch", s_cfg.hideTouchCoords);
     prefs.end();
   }
 }
 
 void uiSettingsReset() {
-  s_cfg = { 100, 8, true, true };
+  s_cfg = { 100, 8, true, true, true, false };
   uiSettingsSave();
   uiSettingsNotifyAll();
 }
 
 void uiSettingsUpdate(const UiSettings& nextCfg, bool persist) {
-  s_cfg.scalePct    = constrain(nextCfg.scalePct, 60, 110);
-  s_cfg.rowGapPx    = constrain(nextCfg.rowGapPx, 2, 24);
-  s_cfg.showSeconds = nextCfg.showSeconds;
-  s_cfg.showDate    = nextCfg.showDate;
+  s_cfg.scalePct        = constrain(nextCfg.scalePct, 60, 110);
+  s_cfg.rowGapPx        = constrain(nextCfg.rowGapPx, 2, 24);
+  s_cfg.showSeconds     = nextCfg.showSeconds;
+  s_cfg.showDate        = nextCfg.showDate;
+  s_cfg.showTouchDot    = nextCfg.showTouchDot;
+  s_cfg.hideTouchCoords = nextCfg.hideTouchCoords;
   if (persist) {
     uiSettingsSave();
   }

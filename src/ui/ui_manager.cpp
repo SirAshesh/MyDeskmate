@@ -3,6 +3,9 @@
 #include "notification_shade.h"
 #include "page_home.h"
 #include "page_antigravity.h"
+#include "page_resources.h"
+#include "page_timer.h"
+#include "page_lyrics.h"
 #include "page_settings.h"
 #include "icon_antigravity.h"
 #include "studio_theme.h"
@@ -11,7 +14,7 @@
 #include "../utils/ui_settings.h"
 #include "ui_config.h"
 
-static constexpr int MAX_PAGES = 8;
+static constexpr int MAX_PAGES = 12;
 
 struct MenuPageEntry {
   lv_obj_t* btn;
@@ -35,11 +38,10 @@ static void onMenuBtnClick(lv_event_t* e) {
   uiSetActivePage(idx);
 }
 
-static lv_obj_t* makeSidebarBtnBase(lv_obj_t* parent, int index, int pageIdx) {
-  constexpr int BTN_SIZE = 50;
+static lv_obj_t* makeSidebarBtnBase(lv_obj_t* parent, int /*index*/, int pageIdx) {
+  constexpr int BTN_SIZE = 44;
   lv_obj_t* btn = lv_btn_create(parent);
   lv_obj_remove_style_all(btn);
-  lv_obj_set_pos(btn, (UI_LEFT_SIDEBAR_W - BTN_SIZE) / 2, 12 + index * (BTN_SIZE + 10));
   lv_obj_set_size(btn, BTN_SIZE, BTN_SIZE);
   lv_obj_set_style_bg_color(btn, lv_color_hex(StudioTheme::ELEVATED), 0);
   lv_obj_set_style_bg_color(btn, lv_color_hex(StudioTheme::SURFACE), LV_STATE_PRESSED);
@@ -47,6 +49,7 @@ static lv_obj_t* makeSidebarBtnBase(lv_obj_t* parent, int index, int pageIdx) {
   lv_obj_set_style_border_color(btn, lv_color_hex(StudioTheme::RULE), 0);
   lv_obj_set_style_border_width(btn, 1, 0);
   lv_obj_set_style_radius(btn, 12, 0);
+  lv_obj_set_style_clip_corner(btn, true, 0);
   lv_obj_add_event_cb(btn, onMenuBtnClick, LV_EVENT_CLICKED, (void*)(intptr_t)pageIdx);
   return btn;
 }
@@ -55,7 +58,7 @@ static lv_obj_t* makeSidebarBtn(lv_obj_t* parent, int index, const char* symbol,
   lv_obj_t* btn = makeSidebarBtnBase(parent, index, pageIdx);
   lv_obj_t* icon = lv_label_create(btn);
   lv_label_set_text(icon, symbol);
-  lv_obj_set_style_text_font(icon, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(icon, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(icon, lv_color_hex(StudioTheme::MUTED), 0);
   lv_obj_center(icon);
   return btn;
@@ -147,8 +150,16 @@ void buildUi() {
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Sisi kiri: area kecil khusus untuk icon (tidak ikut ter-scale)
+  // Sisi kiri: area kecil khusus untuk icon (scrollable vertikal, scrollbar disembunyikan)
   s_panelLeft = makePlainBox(scr, 0, 0, UI_LEFT_SIDEBAR_W, UI_H);
+  lv_obj_add_flag(s_panelLeft, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(s_panelLeft, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(s_panelLeft, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_layout(s_panelLeft, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(s_panelLeft, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(s_panelLeft, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_ver(s_panelLeft, 8, 0);
+  lv_obj_set_style_pad_row(s_panelLeft, 7, 0);
   lv_obj_set_style_bg_color(s_panelLeft, lv_color_hex(StudioTheme::HEADER), 0);
   lv_obj_set_style_bg_opa(s_panelLeft, LV_OPA_COVER, 0);
 
@@ -163,13 +174,19 @@ void buildUi() {
   lv_obj_set_style_bg_color(s_panelRight, lv_color_hex(StudioTheme::BG), 0);
   lv_obj_set_style_bg_opa(s_panelRight, LV_OPA_COVER, 0);
 
-  // Daftarkan halaman Home, Antigravity Quota & Settings
+  // Daftarkan halaman Home, Antigravity Quota, Lyrics, Timer, Resource Manager & Settings
   lv_obj_t* pageHome        = buildHomePage(s_panelRight, rightW, UI_H);
   lv_obj_t* pageAntigravity = buildAntigravityPage(s_panelRight, rightW, UI_H);
+  lv_obj_t* pageResources   = buildResourcesPage(s_panelRight, rightW, UI_H);
+  lv_obj_t* pageTimer       = buildTimerPage(s_panelRight, rightW, UI_H);
+  lv_obj_t* pageLyrics      = buildLyricsPage(s_panelRight, rightW, UI_H);
   lv_obj_t* pageSettings    = buildSettingsPage(s_panelRight, rightW, UI_H);
 
   uiRegisterMenuPage(LV_SYMBOL_HOME, pageHome);
   uiRegisterMenuPageImg(&icon_antigravity, pageAntigravity);
+  uiRegisterMenuPage(LV_SYMBOL_AUDIO, pageLyrics);
+  uiRegisterMenuPage(LV_SYMBOL_BELL, pageTimer);
+  uiRegisterMenuPage(LV_SYMBOL_DRIVE, pageResources);
   uiRegisterMenuPage(LV_SYMBOL_SETTINGS, pageSettings);
 
   uiSettingsNotifyAll();

@@ -1,0 +1,7 @@
+services:
+  yt-lyrics-ws:
+    build: .
+    container_name: yt-lyrics-ws
+    ports:
+      - "8765:8765"
+    restart: unless-stopped

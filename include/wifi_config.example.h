@@ -12,3 +12,7 @@
 
 // Interval polling otomatis (ms)
 #define QUOTA_POLL_MS    60000
+
+// WebSocket server untuk menu Lyrics (script/ws-server)
+#define LYRICS_WS_HOST   "192.168.100.80"
+#define LYRICS_WS_PORT   8765
