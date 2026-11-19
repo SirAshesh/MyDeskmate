@@ -3,3 +3,4 @@
 #include "../../os/app_interface.h"
 
 AppDescriptor appTimerDescriptor();
+bool          timerPageIsRunning();

@@ -1,6 +1,7 @@
 #include "ui_shell.h"
 #include "app_manager.h"
 #include "boot_screen.h"
+#include "idle_screen.h"
 #include "notification_shade.h"
 #include "pc_mouse.h"
 #include "studio_theme.h"
@@ -75,6 +76,7 @@ void uiShellInit() {
   appManagerOpen(0);
   uiSettingsNotifyAll();
   bootScreenStart();
+  idleScreenInit();
   pcMouseInit();
   initTouchDebugOverlay();
 }

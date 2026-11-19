@@ -1,5 +1,6 @@
 #include "touch_4wire.h"
 #include "display_hx8357d.h"
+#include "../os/idle_screen.h"
 #include "../os/pc_mouse.h"
 #include "../os/studio_theme.h"
 #include "../utils/ui_settings.h"
@@ -247,6 +248,7 @@ void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   (void)drv;
   static bool    wasDown = false;
   static uint8_t releaseMiss = 0;
+  static bool    swallowUntilRelease = false;
   static int16_t lastX = 0;
   static int16_t lastY = 0;
   static int16_t rawFiltX = 0;
@@ -255,6 +257,18 @@ void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   int sx = 0, sy = 0, rx = 0, ry = 0, pz = 0;
   if (readTouchScreen(sx, sy, &rx, &ry, &pz)) {
     releaseMiss = 0;
+    idleScreenNotifyActivity();
+    if (idleScreenIsActive()) {
+      idleScreenExit();
+      swallowUntilRelease = true;
+    }
+    if (swallowUntilRelease) {
+      data->state = LV_INDEV_STATE_RELEASED;
+      data->point.x = lastX;
+      data->point.y = lastY;
+      return;
+    }
+
     if (!wasDown) {
       wasDown  = true;
       rawFiltX = (int16_t)sx;
@@ -303,6 +317,7 @@ void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
 
     wasDown = false;
     releaseMiss = 0;
+    swallowUntilRelease = false;
 
     int16_t pcX = 0, pcY = 0;
     bool pcLeftDown = false;

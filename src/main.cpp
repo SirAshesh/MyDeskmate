@@ -6,6 +6,7 @@
 #include "hal/display_hx8357d.h"
 #include "hal/touch_4wire.h"
 #include "app/antigravity/app_antigravity.h"
+#include "os/idle_screen.h"
 #include "os/ui_shell.h"
 #include "utils/mqtt_notify.h"
 #include "utils/notify_server.h"
@@ -59,6 +60,9 @@ static void handleSerialCommands() {
     } else if (c == 'r' || c == 'R') {
       resetTouchCal();
       Serial.println("[CAL] Touch calibration reset to default");
+    } else if (c == 'z' || c == 'Z') {
+      if (idleScreenIsActive()) idleScreenExit();
+      else                      idleScreenEnter();
     }
   }
 }
@@ -113,7 +117,7 @@ void setup() {
   Serial.printf("  PSRAM: %u KB (free %u KB)\n",
                 (unsigned)(ESP.getPsramSize() / 1024),
                 (unsigned)(ESP.getFreePsram() / 1024));
-  Serial.println("  Serial cmd: [c] Cal | [t] Touch | [r] Reset Cal | [i] Invert");
+  Serial.println("  Serial cmd: [c] Cal | [t] Touch | [r] Reset Cal | [i] Invert | [z] Idle");
   Serial.println("==========================================");
 }
 

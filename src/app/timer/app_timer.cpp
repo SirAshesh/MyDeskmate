@@ -397,3 +397,7 @@ AppDescriptor appTimerDescriptor() {
     timerBackgroundTick
   };
 }
+
+bool timerPageIsRunning() {
+  return s_state == TimerState::RUNNING;
+}

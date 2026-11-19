@@ -1,0 +1,9 @@
+[package]
+name = "mydeskmate-sim"
+version = "0.1.0"
+edition = "2021"
+description = "Hardware-accurate ESP32-S3 + 3.5-inch HX8357D TFT touchscreen simulator (pure TFT window)"
+
+[dependencies]
+esp32s3 = { path = "../crates/esp32s3" }
+esp-soc = { path = "../crates/esp-soc" }

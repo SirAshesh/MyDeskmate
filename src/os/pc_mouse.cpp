@@ -1,4 +1,5 @@
 #include "pc_mouse.h"
+#include "idle_screen.h"
 #include "studio_theme.h"
 #include "../hal/display_hx8357d.h"
 #include "ui_config.h"
@@ -88,6 +89,10 @@ void pcMouseLoop() {
       s_y         = ny;
       s_lastPktMs = millis();
 
+      if (s_active && (dirty || wheel != 0)) {
+        idleScreenNotifyActivity();
+        if (idleScreenIsActive()) idleScreenExit();
+      }
       if (s_active && wheel != 0) {
         lv_obj_t* target = findScrollableAt(s_x, s_y);
         if (target) {
