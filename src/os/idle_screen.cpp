@@ -1,4 +1,5 @@
 #include "idle_screen.h"
+#include "app_manager.h"
 #include "boot_screen.h"
 #include "notification_shade.h"
 #include "../app/timer/app_timer.h"
@@ -229,8 +230,13 @@ void renderPetSprite(const char* const sprite[PET_SRC_H], bool flipX) {
 
 bool isIdleBlocked() {
   if (bootScreenIsActive())    return true;
-  if (uiIsMusicPageActive())   return true;
-  if (uiIsDiscordPageActive()) return true;
+  int activeIdx = appManagerGetActiveIndex();
+  const AppDescriptor* desc = appManagerGetDescriptor(activeIdx);
+  if (desc && desc->id) {
+    if (strcmp(desc->id, "music") == 0)   return true;
+    if (strcmp(desc->id, "discord") == 0) return true;
+    if (strcmp(desc->id, "monitor") == 0) return true;
+  }
   if (s_discordActive)         return true;
   if (timerPageIsRunning())    return true;
   return false;
