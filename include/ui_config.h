@@ -18,3 +18,6 @@
 //   1 = Aktif (tampilkan titik sentuh & koordinat X/Y)
 //   0 = Nonaktif
 #define UI_DEBUG_TOUCH_POS 1
+
+// Durasi idle (ms) sebelum masuk mode layar gelap + jam + pet (default: 5 menit)
+#define UI_IDLE_TIMEOUT_MS (5UL * 60UL * 1000UL)

@@ -1,5 +1,6 @@
 #include "touch_4wire.h"
 #include "display_hx8357d.h"
+#include "../ui/idle_screen.h"
 #include "../ui/studio_theme.h"
 #include "../utils/ui_settings.h"
 #include "calibration_config.h"
@@ -245,11 +246,24 @@ void initTouchDebugOverlay() {}
 void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   (void)drv;
   static bool wasDown = false;
+  static bool swallowUntilRelease = false;
   static int16_t lastX = 0;
   static int16_t lastY = 0;
 
   int sx = 0, sy = 0, rx = 0, ry = 0, pz = 0;
   if (readTouchScreen(sx, sy, &rx, &ry, &pz)) {
+    idleScreenNotifyActivity();
+    if (idleScreenIsActive()) {
+      idleScreenExit();
+      swallowUntilRelease = true;
+    }
+    if (swallowUntilRelease) {
+      data->state = LV_INDEV_STATE_RELEASED;
+      data->point.x = lastX;
+      data->point.y = lastY;
+      return;
+    }
+
     lastX = (int16_t)sx;
     lastY = (int16_t)sy;
     data->state = LV_INDEV_STATE_PRESSED;
@@ -277,6 +291,7 @@ void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
     }
   } else {
     wasDown = false;
+    swallowUntilRelease = false;
     data->state = LV_INDEV_STATE_RELEASED;
     data->point.x = lastX;
     data->point.y = lastY;

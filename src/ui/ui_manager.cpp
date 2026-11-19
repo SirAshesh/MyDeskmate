@@ -1,5 +1,6 @@
 #include "ui_manager.h"
 #include "boot_screen.h"
+#include "idle_screen.h"
 #include "notification_shade.h"
 #include "page_home.h"
 #include "page_antigravity.h"
@@ -28,6 +29,8 @@ static lv_obj_t* s_panelRight = nullptr;
 static MenuPageEntry s_pages[MAX_PAGES] = {};
 static int s_pageCount = 0;
 static int s_activePage = -1;
+static int s_musicPageIdx = -1;
+static int s_discordPageIdx = -1;
 
 static void pageAnimYCb(void* var, int32_t v) {
   lv_obj_set_y((lv_obj_t*)var, v);
@@ -95,6 +98,7 @@ int uiRegisterMenuPageImg(const lv_img_dsc_t* imgSrc, lv_obj_t* page) {
 void uiSetActivePage(int pageIdx) {
   bool animateSlide = (s_activePage >= 0 && s_activePage != pageIdx);
   s_activePage = pageIdx;
+  idleScreenNotifyActivity();
 
   for (int i = 0; i < s_pageCount; i++) {
     bool active = (i == pageIdx);
@@ -142,6 +146,22 @@ lv_obj_t* uiGetPanelRight() {
   return s_panelRight;
 }
 
+int uiGetActivePage() {
+  return s_activePage;
+}
+
+bool uiIsMusicPageActive() {
+  return s_musicPageIdx >= 0 && s_activePage == s_musicPageIdx;
+}
+
+bool uiIsDiscordPageActive() {
+  return s_discordPageIdx >= 0 && s_activePage == s_discordPageIdx;
+}
+
+void uiSetDiscordPageIndex(int pageIdx) {
+  s_discordPageIdx = pageIdx;
+}
+
 void buildUi() {
   uiSettingsLoad();
 
@@ -184,7 +204,7 @@ void buildUi() {
 
   uiRegisterMenuPage(LV_SYMBOL_HOME, pageHome);
   uiRegisterMenuPageImg(&icon_antigravity, pageAntigravity);
-  uiRegisterMenuPage(LV_SYMBOL_AUDIO, pageLyrics);
+  s_musicPageIdx = uiRegisterMenuPage(LV_SYMBOL_AUDIO, pageLyrics);
   uiRegisterMenuPage(LV_SYMBOL_BELL, pageTimer);
   uiRegisterMenuPage(LV_SYMBOL_DRIVE, pageResources);
   uiRegisterMenuPage(LV_SYMBOL_SETTINGS, pageSettings);
@@ -192,6 +212,7 @@ void buildUi() {
   uiSettingsNotifyAll();
   uiSetActivePage(0);
   notificationShadeInit();
+  idleScreenInit();
   bootScreenStart();
   initTouchDebugOverlay();
 }

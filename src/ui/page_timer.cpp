@@ -353,3 +353,7 @@ lv_obj_t* buildTimerPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_timer_create(onTimerTick, 100, nullptr);
   return s_pageTimer;
 }
+
+bool timerPageIsRunning() {
+  return s_state == TimerState::RUNNING;
+}

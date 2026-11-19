@@ -4,6 +4,10 @@
 
 void buildUi();
 void uiSetActivePage(int pageIdx);
+int  uiGetActivePage();
+bool uiIsMusicPageActive();
+bool uiIsDiscordPageActive();
+void uiSetDiscordPageIndex(int pageIdx);
 int  uiRegisterMenuPage(const char* symbol, lv_obj_t* page);
 int  uiRegisterMenuPageImg(const lv_img_dsc_t* imgSrc, lv_obj_t* page);
 lv_obj_t* uiGetPanelRight();
