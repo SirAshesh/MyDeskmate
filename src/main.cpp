@@ -5,8 +5,8 @@
 
 #include "hal/display_hx8357d.h"
 #include "hal/touch_4wire.h"
-#include "ui/page_antigravity.h"
-#include "ui/ui_manager.h"
+#include "app/antigravity/app_antigravity.h"
+#include "os/ui_shell.h"
 #include "utils/mqtt_notify.h"
 #include "utils/notify_server.h"
 
@@ -100,11 +100,13 @@ void setup() {
   lv_disp_drv_register(&lvDispDrv);
 
   lv_indev_drv_init(&lvIndevDrv);
-  lvIndevDrv.type    = LV_INDEV_TYPE_POINTER;
-  lvIndevDrv.read_cb = lvglTouchReadCb;
+  lvIndevDrv.type         = LV_INDEV_TYPE_POINTER;
+  lvIndevDrv.read_cb      = lvglTouchReadCb;
+  lvIndevDrv.scroll_limit = 6;
+  lvIndevDrv.scroll_throw = 14;
   lv_indev_drv_register(&lvIndevDrv);
 
-  buildUi();
+  uiShellInit();
 
   Serial.println("==========================================");
   Serial.println("  S3-OS Studio UI (LVGL + LovyanGFX)");
@@ -119,6 +121,7 @@ void loop() {
   handleSerialCommands();
   notifyServerLoop();
   mqttNotifyLoop();
+  uiShellLoop();
   uint32_t waitMs = lv_timer_handler();
   if (waitMs > 5) waitMs = 5;
   if (waitMs < 1) waitMs = 1;

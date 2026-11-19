@@ -1,17 +1,18 @@
-#include "page_home.h"
-#include "studio_theme.h"
-#include "../utils/scaled_font.h"
-#include "../utils/ui_settings.h"
+#include "app_home.h"
+#include "../../os/studio_theme.h"
+#include "../../utils/scaled_font.h"
+#include "../../utils/ui_settings.h"
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
 
-static lv_obj_t* s_pageHome = nullptr;
-static lv_obj_t* s_lblClock = nullptr;
-static lv_obj_t* s_lblDay   = nullptr;
-static lv_obj_t* s_lblDate  = nullptr;
+static lv_obj_t*   s_pageHome   = nullptr;
+static lv_obj_t*   s_lblClock   = nullptr;
+static lv_obj_t*   s_lblDay     = nullptr;
+static lv_obj_t*   s_lblDate    = nullptr;
+static lv_timer_t* s_clockTimer = nullptr;
 
 static void initFallbackRtcFromBuildTime() {
   if (time(nullptr) >= 1700000000L) return;
@@ -77,11 +78,10 @@ static void updateClockDisplay(lv_timer_t* timer) {
 }
 
 static void onHomeSettingsChanged(const UiSettings& cfg) {
+  if (!s_pageHome) return;
   updateScaledClockFontMetrics();
 
-  if (s_pageHome) {
-    lv_obj_set_style_pad_row(s_pageHome, uiScalePx(cfg.rowGapPx), 0);
-  }
+  lv_obj_set_style_pad_row(s_pageHome, uiScalePx(cfg.rowGapPx), 0);
 
   if (s_lblClock) {
     lv_obj_set_style_text_font(s_lblClock, getScaledClockFont(), 0);
@@ -104,17 +104,15 @@ static void onHomeSettingsChanged(const UiSettings& cfg) {
   }
 
   updateClockDisplay(nullptr);
-  if (s_pageHome) {
-    lv_obj_mark_layout_as_dirty(s_pageHome);
-    lv_obj_update_layout(s_pageHome);
-    lv_obj_invalidate(s_pageHome);
-  }
+  lv_obj_mark_layout_as_dirty(s_pageHome);
+  lv_obj_update_layout(s_pageHome);
+  lv_obj_invalidate(s_pageHome);
 }
 
-lv_obj_t* buildHomePage(lv_obj_t* parent, int rightW, int rightH) {
+static lv_obj_t* homeOnCreate(lv_obj_t* parent, int w, int h) {
   initScaledClockFont();
 
-  s_pageHome = makePlainBox(parent, 0, 0, rightW, rightH);
+  s_pageHome = makePlainBox(parent, 0, 0, w, h);
   lv_obj_set_layout(s_pageHome, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(s_pageHome, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(s_pageHome, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -137,7 +135,37 @@ lv_obj_t* buildHomePage(lv_obj_t* parent, int rightW, int rightH) {
   initFallbackRtcFromBuildTime();
   uiSettingsSubscribe(onHomeSettingsChanged);
   onHomeSettingsChanged(uiSettingsGet());
-  lv_timer_create(updateClockDisplay, 1000, nullptr);
+  s_clockTimer = lv_timer_create(updateClockDisplay, 1000, nullptr);
 
   return s_pageHome;
+}
+
+static void homeOnDestroy() {
+  if (s_clockTimer) {
+    lv_timer_del(s_clockTimer);
+    s_clockTimer = nullptr;
+  }
+  s_pageHome = nullptr;
+  s_lblClock = nullptr;
+  s_lblDay   = nullptr;
+  s_lblDate  = nullptr;
+}
+
+static void homeOnResume() {
+  updateClockDisplay(nullptr);
+}
+
+AppDescriptor appHomeDescriptor() {
+  return AppDescriptor{
+    "home",
+    "Home",
+    LV_SYMBOL_HOME,
+    nullptr,
+    true, // Home tetap hidup sebagai launcher utama
+    homeOnCreate,
+    homeOnDestroy,
+    homeOnResume,
+    nullptr,
+    nullptr
+  };
 }

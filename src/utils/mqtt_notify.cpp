@@ -1,6 +1,6 @@
 #include "mqtt_notify.h"
-#include "../ui/notification_shade.h"
-#include "../ui/studio_theme.h"
+#include "../os/notification_shade.h"
+#include "../os/studio_theme.h"
 #include "wifi_config.h"
 #include <Arduino.h>
 #include <PubSubClient.h>

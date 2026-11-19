@@ -1,6 +1,6 @@
-#include "page_lyrics.h"
-#include "studio_theme.h"
-#include "../utils/text_sanitize.h"
+#include "app_music.h"
+#include "../../os/studio_theme.h"
+#include "../../utils/text_sanitize.h"
 #include "wifi_config.h"
 
 #include <Arduino.h>
@@ -83,6 +83,9 @@ char              s_loadedThumbVid[32] = {};
 
 WebSocketsClient  s_ws;
 bool              s_wsStarted  = false;
+bool              s_taskStarted = false;
+bool              s_stateInited = false;
+lv_timer_t*       s_uiTimer    = nullptr;
 } // namespace
 
 static String extractJsonStr(const String& json, const char* key) {
@@ -394,26 +397,29 @@ static lv_obj_t* makeCtrlBtn(lv_obj_t* parent, int w, int h, const char* sym,
   return btn;
 }
 
-lv_obj_t* buildLyricsPage(lv_obj_t* parent, int rightW, int rightH) {
-  s_stateMutex = xSemaphoreCreateMutex();
-  s_cmdQueue   = xQueueCreate(8, 16);
+static lv_obj_t* musicOnCreate(lv_obj_t* parent, int rightW, int rightH) {
+  if (!s_stateInited) {
+    s_stateInited = true;
+    s_stateMutex = xSemaphoreCreateMutex();
+    s_cmdQueue   = xQueueCreate(8, 16);
 
-  s_thumbBuf   = (uint8_t*)heap_caps_malloc(THUMB_BYTES, MALLOC_CAP_SPIRAM);
-  if (!s_thumbBuf) s_thumbBuf = (uint8_t*)malloc(THUMB_BYTES);
-  s_thumbStage = (uint8_t*)heap_caps_malloc(THUMB_BYTES, MALLOC_CAP_SPIRAM);
-  if (!s_thumbStage) s_thumbStage = (uint8_t*)malloc(THUMB_BYTES);
+    s_thumbBuf   = (uint8_t*)heap_caps_malloc(THUMB_BYTES, MALLOC_CAP_SPIRAM);
+    if (!s_thumbBuf) s_thumbBuf = (uint8_t*)malloc(THUMB_BYTES);
+    s_thumbStage = (uint8_t*)heap_caps_malloc(THUMB_BYTES, MALLOC_CAP_SPIRAM);
+    if (!s_thumbStage) s_thumbStage = (uint8_t*)malloc(THUMB_BYTES);
 
-  s_thumbDsc.header.always_zero = 0;
-  s_thumbDsc.header.w           = THUMB_W;
-  s_thumbDsc.header.h           = THUMB_H;
-  s_thumbDsc.header.cf          = LV_IMG_CF_TRUE_COLOR;
-  s_thumbDsc.data_size          = THUMB_BYTES;
-  s_thumbDsc.data               = s_thumbBuf;
+    s_thumbDsc.header.always_zero = 0;
+    s_thumbDsc.header.w           = THUMB_W;
+    s_thumbDsc.header.h           = THUMB_H;
+    s_thumbDsc.header.cf          = LV_IMG_CF_TRUE_COLOR;
+    s_thumbDsc.data_size          = THUMB_BYTES;
+    s_thumbDsc.data               = s_thumbBuf;
 
-  snprintf(s_shared.title, sizeof(s_shared.title), "Menunggu YouTube...");
-  snprintf(s_shared.artist, sizeof(s_shared.artist), "Buka YouTube + Tampermonkey");
-  snprintf(s_shared.curr, sizeof(s_shared.curr), "Menunggu lagu dari YouTube...");
-  s_shared.paused = true;
+    snprintf(s_shared.title, sizeof(s_shared.title), "Menunggu YouTube...");
+    snprintf(s_shared.artist, sizeof(s_shared.artist), "Buka YouTube + Tampermonkey");
+    snprintf(s_shared.curr, sizeof(s_shared.curr), "Menunggu lagu dari YouTube...");
+    s_shared.paused = true;
+  }
 
   s_pageLyrics = makePlainBox(parent, 0, 0, rightW, rightH);
   lv_obj_set_style_pad_hor(s_pageLyrics, 14, 0);
@@ -503,18 +509,18 @@ lv_obj_t* buildLyricsPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_set_style_border_color(s_viewLyrics, lv_color_hex(StudioTheme::RULE), 0);
   lv_obj_set_style_border_width(s_viewLyrics, 1, 0);
   lv_obj_set_style_radius(s_viewLyrics, 12, 0);
-  lv_obj_set_style_pad_hor(s_viewLyrics, 14, 0);
+  lv_obj_set_style_pad_hor(s_viewLyrics, 10, 0);
   lv_obj_set_style_pad_ver(s_viewLyrics, 10, 0);
-  lv_obj_set_style_pad_row(s_viewLyrics, 6, 0);
+  lv_obj_set_style_pad_row(s_viewLyrics, 8, 0);
   lv_obj_set_layout(s_viewLyrics, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(s_viewLyrics, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(s_viewLyrics, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   lv_obj_add_flag(s_viewLyrics, LV_OBJ_FLAG_HIDDEN);
 
-  const int lyrW = contentW - 28;
+  const int lyrW = contentW - 20;
   s_lblLyrTitle = lv_label_create(s_viewLyrics);
   lv_label_set_text(s_lblLyrTitle, s_shared.title);
-  lv_obj_set_width(s_lblLyrTitle, lyrW);
+  lv_obj_set_size(s_lblLyrTitle, lyrW, 28);
   lv_label_set_long_mode(s_lblLyrTitle, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_font(s_lblLyrTitle, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(s_lblLyrTitle, lv_color_hex(StudioTheme::TEAL), 0);
@@ -524,11 +530,11 @@ lv_obj_t* buildLyricsPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_set_layout(lyrBody, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(lyrBody, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(lyrBody, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-  lv_obj_set_style_pad_row(lyrBody, 5, 0);
+  lv_obj_set_style_pad_row(lyrBody, 7, 0);
 
   s_lblLyricPrev = lv_label_create(lyrBody);
   lv_label_set_text(s_lblLyricPrev, "");
-  lv_obj_set_width(s_lblLyricPrev, lyrW);
+  lv_obj_set_size(s_lblLyricPrev, lyrW, 16);
   lv_label_set_long_mode(s_lblLyricPrev, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_font(s_lblLyricPrev, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(s_lblLyricPrev, lv_color_hex(StudioTheme::SUBTLE), 0);
@@ -537,20 +543,20 @@ lv_obj_t* buildLyricsPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_label_set_text(s_lblLyricCurr, s_shared.curr);
   lv_obj_set_width(s_lblLyricCurr, lyrW);
   lv_label_set_long_mode(s_lblLyricCurr, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_max_height(s_lblLyricCurr, 52, 0);
+  lv_obj_set_style_max_height(s_lblLyricCurr, 58, 0);
   lv_obj_set_style_text_font(s_lblLyricCurr, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(s_lblLyricCurr, lv_color_hex(StudioTheme::CHAMPAGNE), 0);
 
   s_lblLyricNext1 = lv_label_create(lyrBody);
   lv_label_set_text(s_lblLyricNext1, "");
-  lv_obj_set_width(s_lblLyricNext1, lyrW);
+  lv_obj_set_size(s_lblLyricNext1, lyrW, 18);
   lv_label_set_long_mode(s_lblLyricNext1, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_font(s_lblLyricNext1, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(s_lblLyricNext1, lv_color_hex(StudioTheme::MUTED), 0);
 
   s_lblLyricNext2 = lv_label_create(lyrBody);
   lv_label_set_text(s_lblLyricNext2, "");
-  lv_obj_set_width(s_lblLyricNext2, lyrW);
+  lv_obj_set_size(s_lblLyricNext2, lyrW, 16);
   lv_label_set_long_mode(s_lblLyricNext2, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_font(s_lblLyricNext2, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(s_lblLyricNext2, lv_color_hex(StudioTheme::SUBTLE), 0);
@@ -609,7 +615,57 @@ lv_obj_t* buildLyricsPage(lv_obj_t* parent, int rightW, int rightH) {
   s_btnLyrics = makeCtrlBtn(ctrlRow, 56, 48, LV_SYMBOL_LIST, StudioTheme::RULE, StudioTheme::MUTED,
                             onToggleLyricsViewClick, &s_lblLyricsBtn);
 
-  xTaskCreatePinnedToCore(lyricsWsTask, "lyrics_ws", 6144, nullptr, 1, nullptr, 0);
-  lv_timer_create(updateLyricsUiTimer, 100, nullptr);
+  if (s_hasThumb && s_thumbBuf) {
+    s_thumbReady = true;
+  }
+  s_dirty = true;
+
+  if (!s_taskStarted) {
+    s_taskStarted = true;
+    xTaskCreatePinnedToCore(lyricsWsTask, "lyrics_ws", 6144, nullptr, 1, nullptr, 0);
+  }
+  s_uiTimer = lv_timer_create(updateLyricsUiTimer, 100, nullptr);
   return s_pageLyrics;
+}
+
+static void musicOnDestroy() {
+  if (s_uiTimer) {
+    lv_timer_del(s_uiTimer);
+    s_uiTimer = nullptr;
+  }
+  s_pageLyrics    = nullptr;
+  s_viewThumb     = nullptr;
+  s_viewLyrics    = nullptr;
+  s_imgThumb      = nullptr;
+  s_lblThumbIcon  = nullptr;
+  s_lblTitle      = nullptr;
+  s_lblArtist     = nullptr;
+  s_lblStatus     = nullptr;
+  s_badgeStatus   = nullptr;
+  s_lblLyrTitle   = nullptr;
+  s_lblLyricPrev  = nullptr;
+  s_lblLyricCurr  = nullptr;
+  s_lblLyricNext1 = nullptr;
+  s_lblLyricNext2 = nullptr;
+  s_lblCurTime    = nullptr;
+  s_lblTotTime    = nullptr;
+  s_barProgress   = nullptr;
+  s_lblPlayPause  = nullptr;
+  s_btnLyrics     = nullptr;
+  s_lblLyricsBtn  = nullptr;
+}
+
+AppDescriptor appMusicDescriptor() {
+  return AppDescriptor{
+    "music",
+    "Musik & Lirik",
+    LV_SYMBOL_AUDIO,
+    nullptr,
+    false,
+    musicOnCreate,
+    musicOnDestroy,
+    nullptr,
+    nullptr,
+    nullptr
+  };
 }

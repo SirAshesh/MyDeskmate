@@ -1,6 +1,6 @@
-#include "page_antigravity.h"
+#include "app_antigravity.h"
 #include "icon_antigravity.h"
-#include "studio_theme.h"
+#include "../../os/studio_theme.h"
 #include "wifi_config.h"
 
 #include <Arduino.h>
@@ -27,6 +27,8 @@ static lv_obj_t*        s_page      = nullptr;
 static lv_obj_t*        s_badge     = nullptr;
 static lv_obj_t*        s_lblBadge  = nullptr;
 static lv_obj_t*        s_lblFooter = nullptr;
+static lv_timer_t*      s_pollTimer = nullptr;
+static bool             s_taskStarted = false;
 static QuotaSlotWidgets s_slots[MAX_QUOTA_SLOTS] = {};
 
 static SemaphoreHandle_t s_httpMutex     = nullptr;
@@ -248,7 +250,7 @@ static lv_obj_t* makeQuotaCard(lv_obj_t* parent, int w, int h, QuotaSlotWidgets&
   return card;
 }
 
-lv_obj_t* buildAntigravityPage(lv_obj_t* parent, int rightW, int rightH) {
+static lv_obj_t* antigravityOnCreate(lv_obj_t* parent, int rightW, int rightH) {
   s_page = makePlainBox(parent, 0, 0, rightW, rightH);
   lv_obj_set_style_pad_hor(s_page, 14, 0);
   lv_obj_set_style_pad_ver(s_page, 12, 0);
@@ -370,16 +372,48 @@ lv_obj_t* buildAntigravityPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_center(lblDemo);
 
   if (isWifiConfigured()) {
-    s_httpMutex = xSemaphoreCreateMutex();
-    if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_STA) {
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    if (!s_taskStarted) {
+      s_taskStarted = true;
+      s_httpMutex = xSemaphoreCreateMutex();
+      if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_STA) {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      }
+      xTaskCreatePinnedToCore(httpQuotaTask, "quota_http", 6144, nullptr, 1, nullptr, 0);
+    } else {
+      s_forceSync = true;
     }
-    xTaskCreatePinnedToCore(httpQuotaTask, "quota_http", 6144, nullptr, 1, nullptr, 0);
-    lv_timer_create(pollHttpQuotaResult, 250, nullptr);
+    s_pollTimer = lv_timer_create(pollHttpQuotaResult, 250, nullptr);
   }
 
   return s_page;
+}
+
+static void antigravityOnDestroy() {
+  if (s_pollTimer) {
+    lv_timer_del(s_pollTimer);
+    s_pollTimer = nullptr;
+  }
+  s_page      = nullptr;
+  s_badge     = nullptr;
+  s_lblBadge  = nullptr;
+  s_lblFooter = nullptr;
+  memset(s_slots, 0, sizeof(s_slots));
+}
+
+AppDescriptor appAntigravityDescriptor() {
+  return AppDescriptor{
+    "antigravity",
+    "Antigravity Quota",
+    nullptr,
+    &icon_antigravity,
+    false,
+    antigravityOnCreate,
+    antigravityOnDestroy,
+    nullptr,
+    nullptr,
+    nullptr
+  };
 }
 
 // Format:

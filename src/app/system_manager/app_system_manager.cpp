@@ -1,6 +1,7 @@
-#include "page_resources.h"
-#include "studio_theme.h"
-#include "../utils/mqtt_notify.h"
+#include "app_system_manager.h"
+#include "../../os/app_manager.h"
+#include "../../os/studio_theme.h"
+#include "../../utils/mqtt_notify.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -18,7 +19,8 @@ static lv_obj_t* s_lblSketchVal  = nullptr;
 static lv_obj_t* s_barSketch     = nullptr;
 static lv_obj_t* s_lblWifiVal    = nullptr;
 static lv_obj_t* s_lblMqttVal    = nullptr;
-static lv_obj_t* s_lblSysVal     = nullptr;
+static lv_obj_t*   s_lblSysVal     = nullptr;
+static lv_timer_t* s_resTimer      = nullptr;
 
 static lv_obj_t* makeResourceCard(lv_obj_t* parent, int w) {
   lv_obj_t* card = makePlainBox(parent, 0, 0, w, LV_SIZE_CONTENT);
@@ -144,14 +146,14 @@ static void updateResourcesDisplay(lv_timer_t* timer) {
   bool mqttOk = (strstr(mqttBuf, "Connected") != nullptr || strstr(mqttBuf, "connected") != nullptr || strstr(mqttBuf, "OK") != nullptr);
   lv_obj_set_style_text_color(s_lblMqttVal, lv_color_hex(mqttOk ? StudioTheme::SAGE : StudioTheme::CHAMPAGNE), 0);
 
-  // System Temp & Chip
+  // System Temp, Chip & Crash Guard
   float tempC = temperatureRead();
-  snprintf(buf, sizeof(buf), "%s (rev %d)  •  %.1f°C",
-           ESP.getChipModel(), ESP.getChipRevision(), tempC);
+  snprintf(buf, sizeof(buf), "%s r%d  •  %.1f°C  •  Q:%d",
+           ESP.getChipModel(), ESP.getChipRevision(), tempC, appManagerGetQuarantineCount());
   lv_label_set_text(s_lblSysVal, buf);
 }
 
-lv_obj_t* buildResourcesPage(lv_obj_t* parent, int rightW, int rightH) {
+static lv_obj_t* systemManagerOnCreate(lv_obj_t* parent, int rightW, int rightH) {
   s_pageResources = makePlainBox(parent, 0, 0, rightW, rightH);
   lv_obj_set_style_pad_hor(s_pageResources, 16, 0);
   lv_obj_set_style_pad_ver(s_pageResources, 10, 0);
@@ -270,7 +272,41 @@ lv_obj_t* buildResourcesPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_set_style_text_color(s_lblSysVal, lv_color_hex(StudioTheme::TEXT), 0);
 
   updateResourcesDisplay(nullptr);
-  lv_timer_create(updateResourcesDisplay, 1000, nullptr);
+  s_resTimer = lv_timer_create(updateResourcesDisplay, 1000, nullptr);
 
   return s_pageResources;
+}
+
+static void systemManagerOnDestroy() {
+  if (s_resTimer) {
+    lv_timer_del(s_resTimer);
+    s_resTimer = nullptr;
+  }
+  s_pageResources = nullptr;
+  s_lblChipMeta   = nullptr;
+  s_lblHeapVal    = nullptr;
+  s_barHeap       = nullptr;
+  s_lblPsramVal   = nullptr;
+  s_barPsram      = nullptr;
+  s_lblFlashMeta  = nullptr;
+  s_lblSketchVal  = nullptr;
+  s_barSketch     = nullptr;
+  s_lblWifiVal    = nullptr;
+  s_lblMqttVal    = nullptr;
+  s_lblSysVal     = nullptr;
+}
+
+AppDescriptor appSystemManagerDescriptor() {
+  return AppDescriptor{
+    "sys_mgr",
+    "System Manager",
+    LV_SYMBOL_DRIVE,
+    nullptr,
+    false,
+    systemManagerOnCreate,
+    systemManagerOnDestroy,
+    nullptr,
+    nullptr,
+    nullptr
+  };
 }

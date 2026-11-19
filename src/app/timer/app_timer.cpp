@@ -1,5 +1,6 @@
-#include "page_timer.h"
-#include "studio_theme.h"
+#include "app_timer.h"
+#include "../../os/notification_shade.h"
+#include "../../os/studio_theme.h"
 
 #include <Arduino.h>
 #include <stdio.h>
@@ -21,7 +22,8 @@ static lv_obj_t* s_sldDuration   = nullptr;
 static lv_obj_t* s_btnStartPause = nullptr;
 static lv_obj_t* s_lblStartPause = nullptr;
 static lv_obj_t* s_btnRepeat     = nullptr;
-static lv_obj_t* s_btnStop       = nullptr;
+static lv_obj_t*   s_btnStop       = nullptr;
+static lv_timer_t* s_uiTimer       = nullptr;
 
 static TimerState s_state       = TimerState::IDLE;
 static uint32_t   s_durationMs  = 25UL * 60UL * 1000UL;
@@ -125,20 +127,26 @@ static void setDurationMinutes(int mins, bool syncSlider) {
   refreshTimerUi();
 }
 
-static void onTimerTick(lv_timer_t* timer) {
-  (void)timer;
+static void timerBackgroundTick() {
   if (s_state != TimerState::RUNNING) return;
 
   uint32_t now = millis();
   uint32_t dt  = now - s_lastTickMs;
+  if (dt < 100) return;
   s_lastTickMs = now;
 
   if (dt >= s_remainMs) {
     s_remainMs = 0;
     s_state    = TimerState::FINISHED;
+    notificationPush("Timer Selesai", "Waktu hitung mundur telah habis", nullptr, StudioTheme::CHAMPAGNE);
   } else {
     s_remainMs -= dt;
   }
+}
+
+static void onTimerTick(lv_timer_t* timer) {
+  (void)timer;
+  timerBackgroundTick();
   refreshTimerUi();
 }
 
@@ -205,7 +213,7 @@ static lv_obj_t* makeActionBtn(lv_obj_t* parent, int w, int h, const char* text,
   return btn;
 }
 
-lv_obj_t* buildTimerPage(lv_obj_t* parent, int rightW, int rightH) {
+static lv_obj_t* timerOnCreate(lv_obj_t* parent, int rightW, int rightH) {
   s_pageTimer = makePlainBox(parent, 0, 0, rightW, rightH);
   lv_obj_set_style_pad_hor(s_pageTimer, 14, 0);
   lv_obj_set_style_pad_ver(s_pageTimer, 12, 0);
@@ -349,7 +357,43 @@ lv_obj_t* buildTimerPage(lv_obj_t* parent, int rightW, int rightH) {
     lv_obj_center(pLbl);
   }
 
+  if (s_sldDuration) {
+    lv_slider_set_value(s_sldDuration, (int)(s_durationMs / 60000UL), LV_ANIM_OFF);
+  }
   refreshTimerUi();
-  lv_timer_create(onTimerTick, 100, nullptr);
+  s_uiTimer = lv_timer_create(onTimerTick, 100, nullptr);
   return s_pageTimer;
+}
+
+static void timerOnDestroy() {
+  if (s_uiTimer) {
+    lv_timer_del(s_uiTimer);
+    s_uiTimer = nullptr;
+  }
+  s_pageTimer     = nullptr;
+  s_lblStatus     = nullptr;
+  s_badgeStatus   = nullptr;
+  s_lblTime       = nullptr;
+  s_barRemain     = nullptr;
+  s_lblSet        = nullptr;
+  s_sldDuration   = nullptr;
+  s_btnStartPause = nullptr;
+  s_lblStartPause = nullptr;
+  s_btnRepeat     = nullptr;
+  s_btnStop       = nullptr;
+}
+
+AppDescriptor appTimerDescriptor() {
+  return AppDescriptor{
+    "timer",
+    "Timer",
+    LV_SYMBOL_BELL,
+    nullptr,
+    false,
+    timerOnCreate,
+    timerOnDestroy,
+    nullptr,
+    nullptr,
+    timerBackgroundTick
+  };
 }

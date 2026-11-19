@@ -9,7 +9,8 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import aiohttp
 from aiohttp import web
-from PIL import Image, ImageDraw
+from PIL import Image
+from discord_bridge import register_discord_routes
 
 PORT = int(os.environ.get("PORT", "8765"))
 THUMB_SIZE = 128
@@ -417,165 +418,14 @@ async def root_handler(request: web.Request) -> web.StreamResponse:
     return await handle_health(request)
 
 
-WUWA_REGIONS = {
-    "huanglong": "https://wuthering.gg/tiles/2/{x}/{y}.png",
-    "rinascita": "https://wuthering.gg/rinascita-tiles/2/{x}/{y}.png",
-    "mengzhou": "https://wuthering.gg/mengzhou-tiles/2/{x}/{y}.png",
-    "lahai-roi": "https://wuthering.gg/lahai-roi-tiles/2/{x}/{y}.png",
-}
-wuwa_map_cache: Dict[str, bytes] = {}
-
-
-async def _fetch_tile(session: aiohttp.ClientSession, url: str) -> Optional[Image.Image]:
-    try:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                raw = await resp.read()
-                return Image.open(io.BytesIO(raw)).convert("RGB")
-    except Exception:
-        pass
-    return None
-
-
-async def handle_wuwa_region(request: web.Request) -> web.Response:
-    region = request.query.get("region", "huanglong").strip().lower()
-    if region not in WUWA_REGIONS:
-        region = "huanglong"
-    try:
-        size = max(256, min(768, int(request.query.get("size", "640"))))
-    except Exception:
-        size = 640
-
-    cache_key = f"{region}:{size}"
-    if cache_key in wuwa_map_cache:
-        return web.Response(body=wuwa_map_cache[cache_key], content_type="application/octet-stream")
-
-    tpl = WUWA_REGIONS[region]
-    timeout = aiohttp.ClientTimeout(total=15)
-    headers = {"User-Agent": "Mozilla/5.0"}
-    canvas = Image.new("RGB", (1024, 1024), (15, 19, 25))
-
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        tasks = []
-        coords = []
-        for ty in range(4):
-            for tx in range(4):
-                coords.append((tx, ty))
-                tasks.append(_fetch_tile(session, tpl.format(x=tx, y=ty)))
-        tiles = await asyncio.gather(*tasks)
-
-    ok_count = 0
-    for (tx, ty), tile in zip(coords, tiles):
-        if tile is not None:
-            canvas.paste(tile, (tx * 256, ty * 256))
-            ok_count += 1
-
-    if ok_count == 0:
-        return web.Response(status=502, text="failed to fetch wuthering.gg tiles")
-
-    canvas = canvas.resize((size, size), Image.Resampling.LANCZOS)
-    buf = bytearray(size * size * 2)
-    idx = 0
-    for r, g, b in canvas.getdata():
-        rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-        struct.pack_into("<H", buf, idx, rgb565)
-        idx += 2
-
-    data = bytes(buf)
-    wuwa_map_cache[cache_key] = data
-    print(f"[WUWA] Cached {cache_key} ({ok_count}/16 tiles, {len(data)} bytes)")
-    return web.Response(body=data, content_type="application/octet-stream")
-
-
-async def handle_wuwa_map(request: web.Request) -> web.Response:
-    try:
-        cx = float(request.query.get("cx", "500"))
-        cy = float(request.query.get("cy", "500"))
-        z = max(0.5, min(3.0, float(request.query.get("z", "1.0"))))
-        w = max(120, min(480, int(request.query.get("w", "383"))))
-        h = max(100, min(320, int(request.query.get("h", "236"))))
-    except Exception:
-        return web.Response(status=400, text="bad params")
-
-    img = Image.new("RGB", (w, h), (15, 19, 25))
-    draw = ImageDraw.Draw(img)
-
-    def to_px(wx: float, wy: float) -> Tuple[int, int]:
-        return int((wx - cx) * z + w / 2), int((wy - cy) * z + h / 2)
-
-    # Stylized Huanglong / Solaris-3 regions (water, landmass, highlands, grid)
-    land_poly = [
-        to_px(120, 140), to_px(420, 110), to_px(760, 150), to_px(880, 320),
-        to_px(840, 620), to_px(700, 820), to_px(440, 870), to_px(210, 760),
-        to_px(110, 520), to_px(90, 310),
-    ]
-    draw.polygon(land_poly, fill=(24, 30, 38), outline=(48, 62, 76))
-
-    jinzhou_poly = [
-        to_px(380, 380), to_px(560, 370), to_px(580, 520), to_px(390, 540),
-    ]
-    draw.polygon(jinzhou_poly, fill=(31, 40, 50), outline=(72, 110, 120))
-
-    firmament_poly = [
-        to_px(670, 580), to_px(830, 560), to_px(860, 740), to_px(680, 770),
-    ]
-    draw.polygon(firmament_poly, fill=(28, 36, 48), outline=(88, 128, 160))
-
-    # Topographic grid lines every 100 world units
-    step = 100
-    x0 = int((cx - w / (2 * z)) // step) * step
-    x1 = int((cx + w / (2 * z)) // step + 1) * step
-    y0 = int((cy - h / (2 * z)) // step) * step
-    y1 = int((cy + h / (2 * z)) // step + 1) * step
-    for gx in range(x0, x1 + 1, step):
-        px, _ = to_px(gx, cy)
-        draw.line([(px, 0), (px, h)], fill=(26, 32, 40), width=1)
-    for gy in range(y0, y1 + 1, step):
-        _, py = to_px(cx, gy)
-        draw.line([(0, py), (w, py)], fill=(26, 32, 40), width=1)
-
-    # Roads between major landmarks
-    roads = [
-        ((470, 450), (310, 290)),
-        ((470, 450), (650, 320)),
-        ((470, 450), (510, 680)),
-        ((510, 680), (740, 660)),
-        ((470, 450), (240, 560)),
-    ]
-    for a, b in roads:
-        draw.line([to_px(*a), to_px(*b)], fill=(54, 66, 78), width=2)
-
-    # Region labels
-    regions = [
-        (470, 445, "JINZHOU"),
-        (300, 240, "DESOROCK"),
-        (650, 260, "NORFALL"),
-        (240, 590, "QICHI"),
-        (750, 645, "FIRMAMENT"),
-    ]
-    for rx, ry, name in regions:
-        px, py = to_px(rx, ry)
-        if -40 <= px <= w + 40 and -20 <= py <= h + 20:
-            draw.text((px - 22, py - 6), name, fill=(110, 128, 145))
-
-    buf = bytearray(w * h * 2)
-    idx = 0
-    for r, g, b in img.getdata():
-        rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-        struct.pack_into("<H", buf, idx, rgb565)
-        idx += 2
-    return web.Response(body=bytes(buf), content_type="application/octet-stream")
-
-
 def main():
     app = web.Application()
     app.router.add_get("/", root_handler)
     app.router.add_get("/ws", handle_ws)
     app.router.add_post("/yt/state", handle_yt_state_http)
     app.router.add_get("/thumb.rgb565", handle_thumb)
-    app.router.add_get("/wuwa/region.rgb565", handle_wuwa_region)
-    app.router.add_get("/wuwa/map.rgb565", handle_wuwa_map)
     app.router.add_get("/health", handle_health)
+    register_discord_routes(app)
     print(f"[WS-SERVER] Listening on 0.0.0.0:{PORT}")
     web.run_app(app, host="0.0.0.0", port=PORT, print=None)
 

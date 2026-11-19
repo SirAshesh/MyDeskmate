@@ -1,7 +1,8 @@
-#include "page_settings.h"
-#include "studio_theme.h"
-#include "../hal/touch_4wire.h"
-#include "../utils/ui_settings.h"
+#include "app_settings.h"
+#include "../../os/app_manager.h"
+#include "../../os/studio_theme.h"
+#include "../../hal/touch_4wire.h"
+#include "../../utils/ui_settings.h"
 
 static lv_obj_t* s_sldScale        = nullptr;
 static lv_obj_t* s_lblScaleVal     = nullptr;
@@ -12,6 +13,16 @@ static lv_obj_t* s_swDate          = nullptr;
 static lv_obj_t* s_swShowTouch     = nullptr;
 static lv_obj_t* s_swHideTouchLoc  = nullptr;
 static lv_obj_t* s_lblSettingsInfo = nullptr;
+static lv_obj_t* s_lblGuardStatus  = nullptr;
+
+static void onClearQuarantineClick(lv_event_t* e) {
+  (void)e;
+  appManagerClearAllQuarantine();
+  if (s_lblGuardStatus) {
+    lv_label_set_text(s_lblGuardStatus, "Karantina: 0 app (Aman)");
+    lv_obj_set_style_text_color(s_lblGuardStatus, lv_color_hex(StudioTheme::SAGE), 0);
+  }
+}
 
 static void syncSettingsControls(const UiSettings& cfg) {
   if (s_sldScale) lv_slider_set_value(s_sldScale, cfg.scalePct, LV_ANIM_OFF);
@@ -163,7 +174,7 @@ static void styleSettingsSwitch(lv_obj_t* sw, uint32_t accentHex) {
   lv_obj_set_style_bg_color(sw, lv_color_hex(StudioTheme::TEXT), LV_PART_KNOB);
 }
 
-lv_obj_t* buildSettingsPage(lv_obj_t* parent, int rightW, int rightH) {
+static lv_obj_t* settingsOnCreate(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_t* pageSettings = makePlainBox(parent, 0, 0, rightW, rightH);
   lv_obj_add_flag(pageSettings, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(pageSettings, LV_DIR_VER);
@@ -358,6 +369,70 @@ lv_obj_t* buildSettingsPage(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_set_style_text_color(lblReset, lv_color_hex(StudioTheme::CHAMPAGNE), 0);
   lv_obj_center(lblReset);
 
+  // Card 5: Crash Guard (B)
+  lv_obj_t* cardGuard = makeSettingsCard(pageSettings, cardW);
+  lv_obj_t* rowGuard  = makePlainBox(cardGuard, 0, 0, lv_pct(100), LV_SIZE_CONTENT);
+  lv_obj_set_layout(rowGuard, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(rowGuard, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(rowGuard, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  s_lblGuardStatus = lv_label_create(rowGuard);
+  int qCount = appManagerGetQuarantineCount();
+  if (qCount > 0) {
+    lv_label_set_text_fmt(s_lblGuardStatus, "Karantina: %d app (%s)", qCount, appManagerGetLastCrashName());
+    lv_obj_set_style_text_color(s_lblGuardStatus, lv_color_hex(StudioTheme::ROSE), 0);
+  } else {
+    lv_label_set_text(s_lblGuardStatus, "Crash Guard: 0 karantina");
+    lv_obj_set_style_text_color(s_lblGuardStatus, lv_color_hex(StudioTheme::SAGE), 0);
+  }
+  lv_obj_set_style_text_font(s_lblGuardStatus, &lv_font_montserrat_12, 0);
+
+  lv_obj_t* btnClearGuard = lv_btn_create(rowGuard);
+  lv_obj_remove_style_all(btnClearGuard);
+  lv_obj_set_style_bg_color(btnClearGuard, lv_color_hex(StudioTheme::ELEVATED), 0);
+  lv_obj_set_style_bg_color(btnClearGuard, lv_color_hex(StudioTheme::SURFACE), LV_STATE_PRESSED);
+  lv_obj_set_style_bg_opa(btnClearGuard, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(btnClearGuard, lv_color_hex(StudioTheme::TEAL), 0);
+  lv_obj_set_style_border_width(btnClearGuard, 1, 0);
+  lv_obj_set_style_radius(btnClearGuard, 8, 0);
+  lv_obj_set_style_pad_hor(btnClearGuard, 10, 0);
+  lv_obj_set_style_pad_ver(btnClearGuard, 5, 0);
+  lv_obj_add_event_cb(btnClearGuard, onClearQuarantineClick, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t* lblClearGuard = lv_label_create(btnClearGuard);
+  lv_label_set_text(lblClearGuard, "Pulihkan");
+  lv_obj_set_style_text_font(lblClearGuard, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(lblClearGuard, lv_color_hex(StudioTheme::TEAL), 0);
+  lv_obj_center(lblClearGuard);
+
   syncSettingsControls(uiSettingsGet());
   return pageSettings;
+}
+
+static void settingsOnDestroy() {
+  s_sldScale        = nullptr;
+  s_lblScaleVal     = nullptr;
+  s_sldGap          = nullptr;
+  s_lblGapVal       = nullptr;
+  s_swSeconds       = nullptr;
+  s_swDate          = nullptr;
+  s_swShowTouch     = nullptr;
+  s_swHideTouchLoc  = nullptr;
+  s_lblSettingsInfo = nullptr;
+  s_lblGuardStatus  = nullptr;
+}
+
+AppDescriptor appSettingsDescriptor() {
+  return AppDescriptor{
+    "settings",
+    "Settings",
+    LV_SYMBOL_SETTINGS,
+    nullptr,
+    false,
+    settingsOnCreate,
+    settingsOnDestroy,
+    nullptr,
+    nullptr,
+    nullptr
+  };
 }

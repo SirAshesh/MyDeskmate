@@ -1,6 +1,7 @@
 #include "touch_4wire.h"
 #include "display_hx8357d.h"
-#include "../ui/studio_theme.h"
+#include "../os/pc_mouse.h"
+#include "../os/studio_theme.h"
 #include "../utils/ui_settings.h"
 #include "calibration_config.h"
 #include "ui_config.h"
@@ -244,14 +245,34 @@ void initTouchDebugOverlay() {}
 
 void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   (void)drv;
-  static bool wasDown = false;
+  static bool    wasDown = false;
+  static uint8_t releaseMiss = 0;
   static int16_t lastX = 0;
   static int16_t lastY = 0;
+  static int16_t rawFiltX = 0;
+  static int16_t rawFiltY = 0;
 
   int sx = 0, sy = 0, rx = 0, ry = 0, pz = 0;
   if (readTouchScreen(sx, sy, &rx, &ry, &pz)) {
-    lastX = (int16_t)sx;
-    lastY = (int16_t)sy;
+    releaseMiss = 0;
+    if (!wasDown) {
+      wasDown  = true;
+      rawFiltX = (int16_t)sx;
+      rawFiltY = (int16_t)sy;
+      lastX    = (int16_t)sx;
+      lastY    = (int16_t)sy;
+      Serial.printf("[TOUCH] x=%d y=%d (rawX=%d rawY=%d z=%d)\n", sx, sy, rx, ry, pz);
+    } else {
+      // Tolak lonjakan ekstrem 1 frame (noise saat jari hampir terangkat)
+      int dx = abs(sx - lastX);
+      int dy = abs(sy - lastY);
+      if (dx <= 55 && dy <= 55) {
+        rawFiltX = (int16_t)((rawFiltX + sx * 2) / 3);
+        rawFiltY = (int16_t)((rawFiltY + sy * 2) / 3);
+        lastX    = rawFiltX;
+        lastY    = rawFiltY;
+      }
+    }
     data->state = LV_INDEV_STATE_PRESSED;
     data->point.x = lastX;
     data->point.y = lastY;
@@ -260,26 +281,42 @@ void lvglTouchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
     const UiSettings& cfg = uiSettingsGet();
     if (s_touchDbgDot) {
       if (cfg.showTouchDot) {
-        lv_obj_set_pos(s_touchDbgDot, sx - 6, sy - 6);
+        lv_obj_set_pos(s_touchDbgDot, lastX - 6, lastY - 6);
         lv_obj_clear_flag(s_touchDbgDot, LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(s_touchDbgDot, LV_OBJ_FLAG_HIDDEN);
       }
     }
     if (s_touchDbgLabel && !cfg.hideTouchCoords) {
-      lv_label_set_text_fmt(s_touchDbgLabel, "X:%d Y:%d (%d,%d)", sx, sy, rx, ry);
+      lv_label_set_text_fmt(s_touchDbgLabel, "X:%d Y:%d (%d,%d)", lastX, lastY, rx, ry);
     }
 #endif
-
-    if (!wasDown) {
-      wasDown = true;
-      Serial.printf("[TOUCH] x=%d y=%d (rawX=%d rawY=%d z=%d)\n", sx, sy, rx, ry, pz);
-    }
   } else {
+    // Debounce release (tahan ~48ms) agar penurunan tekanan sesaat saat scroll tidak memicu klik/jump
+    if (wasDown && releaseMiss < 3) {
+      releaseMiss++;
+      data->state = LV_INDEV_STATE_PRESSED;
+      data->point.x = lastX;
+      data->point.y = lastY;
+      return;
+    }
+
     wasDown = false;
-    data->state = LV_INDEV_STATE_RELEASED;
-    data->point.x = lastX;
-    data->point.y = lastY;
+    releaseMiss = 0;
+
+    int16_t pcX = 0, pcY = 0;
+    bool pcLeftDown = false;
+    if (pcMouseGetState(pcX, pcY, pcLeftDown)) {
+      lastX = pcX;
+      lastY = pcY;
+      data->state = pcLeftDown ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+      data->point.x = pcX;
+      data->point.y = pcY;
+    } else {
+      data->state = LV_INDEV_STATE_RELEASED;
+      data->point.x = lastX;
+      data->point.y = lastY;
+    }
 
 #if UI_DEBUG_TOUCH_POS
     if (s_touchDbgDot) {
