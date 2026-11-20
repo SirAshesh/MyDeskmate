@@ -7,4 +7,3 @@ void idleScreenNotifyActivity();
 bool idleScreenIsActive();
 void idleScreenEnter();
 void idleScreenExit();
-void idleScreenSetDiscordActive(bool active);

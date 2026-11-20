@@ -103,7 +103,10 @@ static void bootTimerCb(lv_timer_t* /*t*/) {
 
       if (!s_wifiStarted) {
         s_wifiStarted = true;
+        WiFi.persistent(false);
         WiFi.mode(WIFI_STA);
+        WiFi.setSleep(false);
+        WiFi.setAutoReconnect(true);
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
       }
 

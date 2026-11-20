@@ -8,10 +8,10 @@
 
 #include "../app/home/app_home.h"
 #include "../app/antigravity/app_antigravity.h"
-#include "../app/discord/app_discord.h"
 #include "../app/music/app_music.h"
 #include "../app/timer/app_timer.h"
 #include "../app/monitor/app_monitor.h"
+#include "../app/docker/app_docker.h"
 #include "../app/system_manager/app_system_manager.h"
 #include "../app/settings/app_settings.h"
 
@@ -65,7 +65,7 @@ void uiShellInit() {
   // Daftarkan aplikasi secara terisolasi (Lazy-loaded kecuali Home)
   appManagerRegister(appHomeDescriptor());
   appManagerRegister(appAntigravityDescriptor());
-  appManagerRegister(appDiscordDescriptor());
+  appManagerRegister(appDockerDescriptor());
   appManagerRegister(appMusicDescriptor());
   appManagerRegister(appTimerDescriptor());
   appManagerRegister(appMonitorDescriptor());

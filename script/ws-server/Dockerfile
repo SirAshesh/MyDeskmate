@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py discord_bridge.py ./
+COPY server.py discord_bridge.py docker_bridge.py ./
 
 EXPOSE 8765
 

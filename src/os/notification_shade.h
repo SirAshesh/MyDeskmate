@@ -6,6 +6,7 @@
 
 void notificationShadeInit();
 void notificationShadeOpen();
+void notificationShadeOpenWidgets();
 void notificationShadeClose();
 bool notificationShadeIsOpen();
 

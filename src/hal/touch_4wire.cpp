@@ -91,21 +91,15 @@ void resetTouchCal() {
 }
 
 static int readMedianAdc(int pin) {
-  int s[5];
-  for (int i = 0; i < 5; i++) {
-    s[i] = analogRead(pin);
-    delayMicroseconds(20);
-  }
-  for (int i = 0; i < 4; i++) {
-    for (int j = i + 1; j < 5; j++) {
-      if (s[j] < s[i]) {
-        int t = s[i];
-        s[i] = s[j];
-        s[j] = t;
-      }
-    }
-  }
-  return s[2];
+  int a = analogRead(pin);
+  delayMicroseconds(10);
+  int b = analogRead(pin);
+  delayMicroseconds(10);
+  int c = analogRead(pin);
+  if (a > b) { int t = a; a = b; b = t; }
+  if (b > c) { int t = b; b = c; c = t; }
+  if (a > b) { int t = a; a = b; b = t; }
+  return b;
 }
 
 static void detachTouchPinsFromLcd() {
@@ -138,7 +132,7 @@ bool readTouchRaw(int& rawX, int& rawY, int& pressure) {
   pinMode(TS_YM, OUTPUT); digitalWrite(TS_YM, HIGH);
   pinMode(TS_XM, ANALOG);
   pinMode(TS_YP, ANALOG);
-  delayMicroseconds(150);
+  delayMicroseconds(60);
 
   int z1 = analogRead(TS_XM);
   int z2 = analogRead(TS_YP);
@@ -153,21 +147,21 @@ bool readTouchRaw(int& rawX, int& rawY, int& pressure) {
   pinMode(TS_YP, ANALOG);
   pinMode(TS_XP, OUTPUT); digitalWrite(TS_XP, HIGH);
   pinMode(TS_XM, OUTPUT); digitalWrite(TS_XM, LOW);
-  delayMicroseconds(150);
+  delayMicroseconds(60);
   rawX = readMedianAdc(TS_YP);
 
   pinMode(TS_XP, INPUT);
   pinMode(TS_XM, ANALOG);
   pinMode(TS_YP, OUTPUT); digitalWrite(TS_YP, HIGH);
   pinMode(TS_YM, OUTPUT); digitalWrite(TS_YM, LOW);
-  delayMicroseconds(150);
+  delayMicroseconds(60);
   rawY = readMedianAdc(TS_XM);
 
   pinMode(TS_XP, OUTPUT); digitalWrite(TS_XP, LOW);
   pinMode(TS_YM, OUTPUT); digitalWrite(TS_YM, HIGH);
   pinMode(TS_XM, ANALOG);
   pinMode(TS_YP, ANALOG);
-  delayMicroseconds(80);
+  delayMicroseconds(40);
   int zCheck = 4095 - (analogRead(TS_YP) - analogRead(TS_XM));
 
   restoreTftBusPins();

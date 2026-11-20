@@ -55,7 +55,10 @@ static void httpQuotaTask(void* param) {
       lastFetchMs = nowMs;
 
       HTTPClient http;
+      http.setConnectTimeout(4000);
       http.setTimeout(5000);
+      http.setReuse(false);
+      http.useHTTP10(true);
       if (http.begin(QUOTA_SERVER_URL)) {
         int code = http.GET();
         if (code == HTTP_CODE_OK) {
@@ -73,6 +76,10 @@ static void httpQuotaTask(void* param) {
           xSemaphoreGive(s_httpMutex);
         }
         http.end();
+      } else if (s_httpMutex && xSemaphoreTake(s_httpMutex, pdMS_TO_TICKS(200))) {
+        snprintf(s_httpErr, sizeof(s_httpErr), "HTTP begin failed");
+        s_httpHasErr = true;
+        xSemaphoreGive(s_httpMutex);
       }
     } else if (WiFi.status() != WL_CONNECTED && s_forceSync) {
       s_forceSync = false;
@@ -372,14 +379,28 @@ static lv_obj_t* antigravityOnCreate(lv_obj_t* parent, int rightW, int rightH) {
   lv_obj_center(lblDemo);
 
   if (isWifiConfigured()) {
-    if (!s_taskStarted) {
-      s_taskStarted = true;
+    if (!s_httpMutex) {
       s_httpMutex = xSemaphoreCreateMutex();
+    }
+    if (strncmp(s_httpLine, "QUOTA:", 6) == 0) {
+      s_httpHasLine = true;
+    }
+    if (!s_taskStarted) {
       if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_STA) {
+        WiFi.persistent(false);
         WiFi.mode(WIFI_STA);
+        WiFi.setSleep(false);
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
       }
-      xTaskCreatePinnedToCore(httpQuotaTask, "quota_http", 6144, nullptr, 1, nullptr, 0);
+      BaseType_t ok = xTaskCreatePinnedToCore(httpQuotaTask, "quota_http", 6144, nullptr, 1, nullptr, 0);
+      if (ok != pdPASS) {
+        ok = xTaskCreatePinnedToCore(httpQuotaTask, "quota_http", 4096, nullptr, 1, nullptr, 0);
+      }
+      if (ok == pdPASS) {
+        s_taskStarted = true;
+      } else if (s_lblFooter) {
+        lv_label_set_text_fmt(s_lblFooter, "Task gagal (Heap %uK)", (unsigned)(ESP.getFreeHeap() / 1024));
+      }
     } else {
       s_forceSync = true;
     }

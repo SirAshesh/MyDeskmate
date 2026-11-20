@@ -172,7 +172,6 @@ lv_color_t    s_petBuf[PET_W * PET_H];
 lv_img_dsc_t  s_petDsc = {};
 
 bool     s_active           = false;
-bool     s_discordActive    = false;
 uint32_t s_lastActivityMs   = 0;
 
 // Pet animation state
@@ -234,10 +233,8 @@ bool isIdleBlocked() {
   const AppDescriptor* desc = appManagerGetDescriptor(activeIdx);
   if (desc && desc->id) {
     if (strcmp(desc->id, "music") == 0)   return true;
-    if (strcmp(desc->id, "discord") == 0) return true;
     if (strcmp(desc->id, "monitor") == 0) return true;
   }
-  if (s_discordActive)         return true;
   if (timerPageIsRunning())    return true;
   return false;
 }
@@ -471,16 +468,6 @@ void idleScreenNotifyActivity() {
 
 bool idleScreenIsActive() {
   return s_active;
-}
-
-void idleScreenSetDiscordActive(bool active) {
-  s_discordActive = active;
-  if (active) {
-    s_lastActivityMs = millis();
-    if (s_active) {
-      idleScreenExit();
-    }
-  }
 }
 
 void idleScreenEnter() {

@@ -129,10 +129,20 @@ void lvglFlushCb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* color_p)
   uint32_t w = (uint32_t)(area->x2 - area->x1 + 1);
   uint32_t h = (uint32_t)(area->y2 - area->y1 + 1);
 
-  tft.startWrite();
+  if (tft.getStartCount() == 0) {
+    tft.startWrite();
+  }
+  tft.waitDMA();
   tft.setAddrWindow(area->x1, area->y1, w, h);
-  tft.writePixels((lgfx::rgb565_t*)&color_p->full, w * h);
-  tft.endWrite();
+  tft.writePixelsDMA((lgfx::rgb565_t*)&color_p->full, w * h);
+
+  bool isLast = lv_disp_flush_is_last(drv);
+  if (isLast || !drv->draw_buf->buf2) {
+    tft.waitDMA();
+    if (isLast) {
+      tft.endWrite();
+    }
+  }
 
   lv_disp_flush_ready(drv);
 }

@@ -2,4 +2,4 @@
 
 #include "../../os/app_interface.h"
 
-AppDescriptor appDiscordDescriptor();
+AppDescriptor appDockerDescriptor();

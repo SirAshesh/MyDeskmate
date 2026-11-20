@@ -7,13 +7,16 @@
 #define LV_COLOR_DEPTH 16
 #define LV_COLOR_16_SWAP 0
 
-/* Memory allocation for LVGL objects & animations */
+/* Memory allocation for LVGL objects & animations (TLSF pool di 8MB OPI PSRAM agar DRAM internal bebas untuk WiFi/TLS) */
 #define LV_MEM_CUSTOM 0
-#define LV_MEM_SIZE (128U * 1024U)
+#define LV_MEM_SIZE (256U * 1024U)
+#define LV_MEM_POOL_INCLUDE <esp_heap_caps.h>
+#define LV_MEM_POOL_ALLOC(size) heap_caps_malloc((size), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#define LV_MEMCPY_MEMSET_STD 1
 
 /* Display refresh & input read period (ms) */
 #define LV_DISP_DEF_REFR_PERIOD 16
-#define LV_INDEV_DEF_READ_PERIOD 16
+#define LV_INDEV_DEF_READ_PERIOD 20
 
 /* Use ESP-IDF esp_timer_get_time() for C-safe LVGL tick */
 #define LV_TICK_CUSTOM 1
@@ -103,7 +106,7 @@
 #define LV_USE_QRCODE 1
 
 #define LV_USE_LOG 0
-#define LV_USE_ASSERT_NULL 1
+#define LV_USE_ASSERT_NULL 0
 #define LV_USE_ASSERT_MALLOC 1
 
 #endif /* LV_CONF_H */

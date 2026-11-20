@@ -34,10 +34,15 @@ static void pageAnimYCb(void* var, int32_t v) {
   lv_obj_set_y((lv_obj_t*)var, v);
 }
 
+static char s_savedActiveId[24] = "";
+
 static void saveActiveIdNvs(const char* appId) {
+  const char* next = appId ? appId : "";
+  if (strcmp(s_savedActiveId, next) == 0) return;
+  strlcpy(s_savedActiveId, next, sizeof(s_savedActiveId));
   Preferences prefs;
   if (prefs.begin("os_guard", false)) {
-    prefs.putString("active_id", appId ? appId : "");
+    prefs.putString("active_id", next);
     prefs.end();
   }
 }

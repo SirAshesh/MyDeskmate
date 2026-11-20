@@ -13,7 +13,8 @@
 
 static lv_disp_draw_buf_t lvDrawBuf;
 static lv_color_t*        lvBuf1 = nullptr;
-static constexpr int      LV_BUF_LINES = 64;
+static lv_color_t*        lvBuf2 = nullptr;
+static constexpr int      LV_BUF_LINES = 24;
 static lv_disp_drv_t      lvDispDrv;
 static lv_indev_drv_t     lvIndevDrv;
 
@@ -87,14 +88,19 @@ void setup() {
   lv_init();
   int bufLines = LV_BUF_LINES;
   lvBuf1 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
+  lvBuf2 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
+  if (!lvBuf1 || !lvBuf2) {
+    if (lvBuf1) { heap_caps_free(lvBuf1); lvBuf1 = nullptr; }
+    if (lvBuf2) { heap_caps_free(lvBuf2); lvBuf2 = nullptr; }
+    bufLines = 24;
+    lvBuf1 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lvBuf2 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
+  }
   if (!lvBuf1) {
     bufLines = 32;
-    lvBuf1 = (lv_color_t*)heap_caps_malloc(UI_W * bufLines * sizeof(lv_color_t), MALLOC_CAP_DMA);
-  }
-  if (!lvBuf1) {
     lvBuf1 = (lv_color_t*)malloc(UI_W * bufLines * sizeof(lv_color_t));
   }
-  lv_disp_draw_buf_init(&lvDrawBuf, lvBuf1, nullptr, UI_W * bufLines);
+  lv_disp_draw_buf_init(&lvDrawBuf, lvBuf1, lvBuf2, UI_W * bufLines);
 
   lv_disp_drv_init(&lvDispDrv);
   lvDispDrv.hor_res  = UI_W;
@@ -122,12 +128,29 @@ void setup() {
 }
 
 void loop() {
+  static uint32_t s_lastNetPollMs = 0;
+  static uint32_t s_lastWdtYieldMs = 0;
+  uint32_t nowMs = millis();
+
   handleSerialCommands();
-  notifyServerLoop();
+  if (nowMs - s_lastNetPollMs >= 25) {
+    s_lastNetPollMs = nowMs;
+    notifyServerLoop();
+  }
   mqttNotifyLoop();
   uiShellLoop();
+
   uint32_t waitMs = lv_timer_handler();
-  if (waitMs > 5) waitMs = 5;
-  if (waitMs < 1) waitMs = 1;
-  delay(waitMs);
+  if (waitMs == 0) {
+    if (nowMs - s_lastWdtYieldMs >= 20) {
+      s_lastWdtYieldMs = nowMs;
+      vTaskDelay(1);
+    } else {
+      taskYIELD();
+    }
+  } else {
+    if (waitMs > 4) waitMs = 4;
+    s_lastWdtYieldMs = nowMs;
+    vTaskDelay(pdMS_TO_TICKS(waitMs));
+  }
 }

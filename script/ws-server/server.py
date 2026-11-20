@@ -11,6 +11,7 @@ import aiohttp
 from aiohttp import web
 from PIL import Image
 from discord_bridge import register_discord_routes
+from docker_bridge import register_docker_routes
 
 PORT = int(os.environ.get("PORT", "8765"))
 THUMB_SIZE = 128
@@ -426,6 +427,7 @@ def main():
     app.router.add_get("/thumb.rgb565", handle_thumb)
     app.router.add_get("/health", handle_health)
     register_discord_routes(app)
+    register_docker_routes(app)
     print(f"[WS-SERVER] Listening on 0.0.0.0:{PORT}")
     web.run_app(app, host="0.0.0.0", port=PORT, print=None)
 

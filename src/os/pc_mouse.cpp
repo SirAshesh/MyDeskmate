@@ -15,6 +15,7 @@ constexpr uint32_t PC_MOUSE_TIMEOUT_MS = 5000;
 
 WiFiUDP   s_udp;
 bool      s_udpStarted = false;
+bool      s_enabled    = true;
 bool      s_active     = false;
 bool      s_leftDown   = false;
 int16_t   s_x          = UI_W / 2;
@@ -69,6 +70,7 @@ void pcMouseLoop() {
   while ((pktSize = s_udp.parsePacket()) > 0) {
     uint8_t buf[16];
     int n = s_udp.read(buf, sizeof(buf));
+    if (!s_enabled) continue;
     if (n >= 9 && buf[0] == 'P' && buf[1] == 'M') {
       bool nextActive = (buf[2] != 0);
       bool nextLeft   = (buf[3] & 0x01) != 0;
@@ -126,9 +128,28 @@ void pcMouseLoop() {
 }
 
 bool pcMouseGetState(int16_t& outX, int16_t& outY, bool& outLeftDown) {
-  if (!s_active) return false;
+  if (!s_enabled || !s_active) return false;
   outX        = s_x;
   outY        = s_y;
   outLeftDown = s_leftDown;
   return true;
+}
+
+void pcMouseSetEnabled(bool enabled) {
+  s_enabled = enabled;
+  if (!enabled) {
+    s_active   = false;
+    s_leftDown = false;
+    if (s_cursorObj) {
+      lv_obj_add_flag(s_cursorObj, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+}
+
+bool pcMouseIsEnabled() {
+  return s_enabled;
+}
+
+bool pcMouseIsActive() {
+  return s_enabled && s_active;
 }
